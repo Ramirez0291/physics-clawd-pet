@@ -49,6 +49,7 @@ export class ParticleSystem {
   handle(ev: PetEvent) {
     if (ev.type === 'impact') this.impact(ev.tier, ev.x, ev.y, ev.nx, ev.ny, ev.speed);
     else if (ev.type === 'rolling') this.rolling(ev.x, ev.y, ev.vx);
+    else if (ev.type === 'fling') this.impact('bounce', ev.x, ev.y, 0, -1, Math.hypot(ev.vx, ev.vy));
   }
 
   private push(p: Particle) {

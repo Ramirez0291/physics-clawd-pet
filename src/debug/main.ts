@@ -169,9 +169,9 @@ async function main() {
 
   bus.on('telemetry', (t: Telemetry) => {
     if (!connected) bus.emit('debug-hello');
-    const where = ['idle', 'walk', 'land', 'hero', 'splat', 'cling', 'roll'].includes(t.mode)
-      ? ` @ ${SIDE_NAMES[t.side] ?? t.side}`
-      : '';
+    const grounded = ['idle', 'walk', 'land', 'hero', 'splat', 'cling', 'roll'].includes(t.mode);
+    const surface = t.support !== null ? '窗口顶上' : (SIDE_NAMES[t.side] ?? t.side);
+    const where = grounded ? ` @ ${surface}` : '';
     const impact = t.lastImpact
       ? `${TIER_NAMES[t.lastImpact.tier] ?? t.lastImpact.tier} ${Math.round(t.lastImpact.speed)} px/s`
       : '—';
@@ -179,7 +179,8 @@ async function main() {
       `状态  ${MODE_NAMES[t.mode] ?? t.mode}${where}${t.paused ? '（已暂停）' : ''}\n` +
       `速度  ${Math.round(t.speed).toString().padStart(5)} px/s   (${Math.round(t.vx)}, ${Math.round(t.vy)})   自转 ${t.angVel.toFixed(1)} rad/s\n` +
       `上次冲击  ${impact}   眩晕 ${t.dizzy.toFixed(1)}s   ${Math.round(t.fps)} fps\n` +
-      `光标  ${t.cursor ? `${Math.round(t.cursor.x)}, ${Math.round(t.cursor.y)}` : '—'}   ${t.hover ? '在宠物上（可抓取）' : '点击穿透'}`;
+      `光标  ${t.cursor ? `${Math.round(t.cursor.x)}, ${Math.round(t.cursor.y)}` : '—'}   ${t.hover ? '在宠物上（可抓取）' : '点击穿透'}\n` +
+      `窗口  ${t.platforms} 段可站顶边   脚下窗口速度 ${t.support !== null ? `${Math.round(t.carrierSpeed)} px/s` : '—'}`;
     $<HTMLButtonElement>('replay').disabled = !t.hasLaunch;
     if (t.paused !== paused) {
       paused = t.paused;
@@ -246,11 +247,22 @@ async function main() {
 
   if (isTauri) {
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    const win = getCurrentWindow();
     $<HTMLInputElement>('pin').addEventListener('change', (e) => {
-      void getCurrentWindow().setAlwaysOnTop((e.target as HTMLInputElement).checked);
+      void win.setAlwaysOnTop((e.target as HTMLInputElement).checked);
+    });
+    // 面板自己变成全屏窗口：覆盖层应该自动隐藏，退出后 Clawd 从天上掉回来
+    $('fullscreenTest').onclick = async () => {
+      const on = !(await win.isFullscreen());
+      await win.setFullscreen(on);
+      note(on ? '全屏中：Clawd 应该已经躲起来了。按 Esc 退出' : '');
+    };
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') void win.setFullscreen(false).then(() => note(''));
     });
   } else {
     $('pinWrap').hidden = true;
+    $('fullscreenTest').hidden = true;
   }
 
   // 快捷键（焦点不在输入框时）

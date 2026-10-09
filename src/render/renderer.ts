@@ -85,12 +85,18 @@ export class Renderer {
     this.lastSig = '';
   }
 
-  /** CSS 像素坐标是否点在宠物上（不透明像素包围盒 + 外扩） */
-  hitTest(x: number, y: number, pad: number): boolean {
+  /** 可点击区域 [x0, y0, x1, y1]（CSS 像素）：不透明像素包围盒 + 外扩 */
+  hitRect(pad: number): [number, number, number, number] | null {
     const o = this.frame?.opaque;
-    if (!o) return false;
+    if (!o) return null;
     const d = this.dpr;
-    return x >= o.x0 / d - pad && x <= o.x1 / d + pad && y >= o.y0 / d - pad && y <= o.y1 / d + pad;
+    return [o.x0 / d - pad, o.y0 / d - pad, o.x1 / d + pad, o.y1 / d + pad];
+  }
+
+  /** CSS 像素坐标是否点在宠物上 */
+  hitTest(x: number, y: number, pad: number): boolean {
+    const r = this.hitRect(pad);
+    return r !== null && x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
   }
 
   draw(pet: Pet, particles: ParticleSystem, T: Tuning, dt: number) {
@@ -351,6 +357,14 @@ export class Renderer {
     const cy = pet.pos.y * d;
     ctx.lineWidth = Math.max(1, d);
     if (T.showHitbox) {
+      // 可站的窗口顶边：绿色；脚下那段：橙色
+      for (const p of pet.platforms) {
+        const on = pet.support !== null && pet.support.id === p.id && pet.pos.x >= p.x0 && pet.pos.x <= p.x1;
+        ctx.fillStyle = on ? '#f97316' : '#22c55e';
+        const h = Math.max(2, Math.round(2 * d));
+        ctx.fillRect(p.x0 * d, p.y * d - h, (p.x1 - p.x0) * d, h);
+        this.markDirty(p.x0 * d, p.y * d - h, (p.x1 - p.x0) * d, h);
+      }
       const c = Math.abs(Math.cos(pet.rot));
       const s = Math.abs(Math.sin(pet.rot));
       const ex = (c * pet.halfW + s * pet.halfH) * d;

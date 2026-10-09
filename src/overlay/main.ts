@@ -1,10 +1,17 @@
 import clawdDef from '../../skins/clawd/skin.json';
-import type { Vec2 } from '../engine/math';
+import { type Vec2, clamp } from '../engine/math';
 import { DEFAULT_TUNING, mergeTuning, type Tuning } from '../engine/params';
 import { ParticleSystem } from '../engine/particles';
 import { type Bounds, type LaunchState, Pet } from '../engine/pet';
 import { VelocitySampler } from '../engine/throw';
-import { createBus, createOverlayHost, isTauri, loadTuning, openDebugPanel } from '../platform/host';
+import {
+  type CarrierSample,
+  createBus,
+  createOverlayHost,
+  isTauri,
+  loadTuning,
+  openDebugPanel,
+} from '../platform/host';
 import { Renderer } from '../render/renderer';
 import { type SkinDef, loadSkin } from '../skin/types';
 
@@ -30,6 +37,11 @@ export interface Telemetry {
   /** 光标是否在宠物上（= 覆盖层此刻不穿透） */
   hover: boolean;
   cursor: Vec2 | null;
+  /** 站在哪个窗口上（窗口句柄），null = 屏幕边框 */
+  support: number | null;
+  /** 脚下窗口的速度 */
+  carrierSpeed: number;
+  platforms: number;
 }
 
 /** 可重复的测试投掷（相对屏幕尺寸），调参时用来做 A/B 对比 */
@@ -79,6 +91,39 @@ async function main() {
   pet.dropFrom(window.innerWidth * 0.5, window.innerHeight * 0.1);
   if (import.meta.env.DEV) Object.assign(window, { __clawd: { pet, particles, renderer } });
 
+  // ---------- 桌面：窗口平台、脚下窗口追踪、全屏免打扰 ----------
+
+  host.onPlatforms((list) => pet.setPlatforms(list));
+
+  const carrierSampler = new VelocitySampler(300);
+  let carrierLatest: CarrierSample | null = null;
+  let trackedId: number | null = null;
+  /** 离开窗口后再追踪一会儿：被抛起来的宠物还能落回正在移动的窗口 */
+  let trackUntil = 0;
+  host.onCarrier((s) => {
+    if (s.gone) {
+      pet.carrierGone(s.id);
+      if (trackedId === s.id) carrierLatest = null;
+      return;
+    }
+    if (s.id !== trackedId) return;
+    carrierLatest = s;
+    carrierSampler.add(s.t, s.left, s.top);
+  });
+  const carrierMoving = () => carrierLatest !== null && carrierSampler.idleMs(host.clock()) < 150;
+
+  let dndHidden = false;
+  host.onDnd((hidden) => {
+    if (hidden === dndHidden) return;
+    dndHidden = hidden;
+    if (!hidden) {
+      // 全屏程序退出后：从天上掉回来
+      particles.clear();
+      pet.dropFrom(clamp(pet.pos.x, 100, window.innerWidth - 100), window.innerHeight * 0.05);
+    }
+  });
+  host.ready();
+
   // ---------- 鼠标 ----------
 
   let drag: { id: number; downAt: number; x0: number; y0: number; moved: number } | null = null;
@@ -91,6 +136,7 @@ async function main() {
     sampler.clear();
     sampler.add(e.timeStamp, e.clientX, e.clientY);
     pet.grab(e.clientX, e.clientY);
+    host.setDragging(true);
     canvas.style.cursor = 'grabbing';
   });
 
@@ -111,6 +157,7 @@ async function main() {
     const isClick = now - drag.downAt < 220 && drag.moved < 6;
     drag = null;
     pet.release(v.x, v.y, isClick);
+    host.setDragging(false);
     canvas.style.cursor = '';
   };
   canvas.addEventListener('pointerup', endDrag);
@@ -170,10 +217,12 @@ async function main() {
   let fpsT = last;
   let teleT = 0;
   let hover = false;
+  let hitSentAt = 0;
 
   /** 没有任何东西在动：可以降帧省电 */
   const calm = () =>
     !drag &&
+    !carrierMoving() &&
     (pet.mode === 'idle' || pet.mode === 'walk') &&
     particles.list.length === 0 &&
     !renderer.animating &&
@@ -194,13 +243,34 @@ async function main() {
   const frame = (now: number) => {
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
+    if (dndHidden) {
+      // 覆盖层已被隐藏：什么都不算，低频等待恢复
+      setTimeout(() => frame(performance.now()), 250);
+      return;
+    }
 
-    host.poll();
     const cursor: Vec2 | null = host.cursor();
     if (!drag) {
-      hover = cursor !== null && renderer.hitTest(cursor.x, cursor.y, tuning.hitPadding);
-      host.setClickThrough(!hover);
+      hover = host.hovering();
       canvas.style.cursor = hover ? 'grab' : '';
+    }
+
+    // 追踪脚下的窗口（离开后再追 0.6 秒）
+    const supportId = pet.support?.id ?? null;
+    if (supportId !== null) trackUntil = now + 600;
+    const wantId = supportId ?? (now < trackUntil ? trackedId : null);
+    if (wantId !== trackedId) {
+      trackedId = wantId;
+      carrierLatest = null;
+      carrierSampler.clear();
+      pet.resetCarrier();
+      host.setCarrier(wantId);
+    }
+    if (carrierLatest) {
+      const t = host.clock();
+      const v =
+        carrierSampler.idleMs(t) > 50 ? { x: 0, y: 0 } : carrierSampler.velocity(t, tuning.carrierWindowMs);
+      pet.updateCarrier(carrierLatest.id, carrierLatest.left, carrierLatest.top, v.x, v.y);
     }
 
     let simDt = 0;
@@ -221,6 +291,12 @@ async function main() {
     if (n >= MAX_STEPS) acc = 0;
 
     renderer.draw(pet, particles, tuning, simDt);
+
+    // 把可点击区域告诉原生侧（它负责悬停判定和点击穿透）。平静时 10Hz 就够。
+    if (!calm() || now - hitSentAt >= 100) {
+      hitSentAt = now;
+      host.setHitRect(renderer.hitRect(tuning.hitPadding));
+    }
 
     fpsFrames++;
     if (now - fpsT >= 500) {
@@ -248,6 +324,9 @@ async function main() {
         paused,
         hover: hover || drag !== null,
         cursor,
+        support: pet.support?.id ?? null,
+        carrierSpeed: Math.hypot(pet.carrier.vx, pet.carrier.vy),
+        platforms: pet.platforms.length,
       };
       bus.emit('telemetry', t);
     }

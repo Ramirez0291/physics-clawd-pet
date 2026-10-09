@@ -242,10 +242,18 @@ export class Pet {
     }
   }
 
+  /**
+   * 开始追踪一个窗口之前调用：丢掉上一次追踪留下的位置。
+   * 否则同一个窗口在没被追踪时挪过位置，下一次第一个采样会被当成一次瞬移。
+   */
+  resetCarrier() {
+    this.carrier = { id: NaN, left: NaN, top: NaN, vx: 0, vy: 0 };
+  }
+
   /** 被追踪的窗口消失了（关闭、最小化、切到别的虚拟桌面） */
   carrierGone(id: number) {
     this.platforms = this.platforms.filter((p) => p.id !== id);
-    if (this.carrier.id === id) this.carrier = { id: NaN, left: NaN, top: NaN, vx: 0, vy: 0 };
+    if (this.carrier.id === id) this.resetCarrier();
     if (this.support?.id === id) this.loseSupport();
   }
 
@@ -271,6 +279,7 @@ export class Pet {
 
   placeOnFloor(x: number) {
     this.hold = null;
+    this.support = null;
     this.side = 'floor';
     this.pos = { x, y: this.bounds.bottom - this.halfH };
     this.attach('floor', x, { smooth: false });
@@ -543,6 +552,7 @@ export class Pet {
       this.vel.x *= T.maxSpeed / sp;
       this.vel.y *= T.maxSpeed / sp;
     }
+    const prevY = this.pos.y;
     this.pos.x += this.vel.x * dt;
     this.pos.y += this.vel.y * dt;
 
@@ -550,7 +560,7 @@ export class Pet {
     this.angVel *= Math.max(0, 1 - T.angularDrag * dt);
 
     // 快落地时像猫一样自动转正
-    const toFloor = this.bounds.bottom - (this.pos.y + this.halfH);
+    const toFloor = this.groundBelow() - (this.pos.y + this.halfH);
     if (this.vel.y > 0 && toFloor < T.rightingDistance) {
       const target = nearestEquivalent(this.rot, 0);
       const a = approach(T.airRighting, dt);
@@ -558,16 +568,48 @@ export class Pet {
       this.angVel *= 1 - a;
     }
 
-    this.collideAir();
+    this.collideAir(prevY);
   }
 
-  private collideAir() {
+  /** 正下方最近的落脚处（窗口顶边或屏幕底） */
+  private groundBelow(): number {
+    const feet = this.pos.y + this.halfH;
+    let y = this.bounds.bottom;
+    for (const p of this.platforms) {
+      if (p.y >= feet && p.y < y && this.pos.x >= p.x0 && this.pos.x <= p.x1) y = p.y;
+    }
+    return y;
+  }
+
+  /** 平台头顶要有足够空间站下宠物 */
+  private hasHeadroom(p: Platform): boolean {
+    return p.y - this.bounds.top >= this.halfH * 2;
+  }
+
+  private collideAir(prevY: number) {
     const { left, top, right, bottom } = this.bounds;
     // 旋转后的包围盒半宽/半高
     const c = Math.abs(Math.cos(this.rot));
     const s = Math.abs(Math.sin(this.rot));
     const ex = c * this.halfW + s * this.halfH;
     const ey = s * this.halfW + c * this.halfH;
+
+    // 单向平台：只有下落、并且上一步还在顶边上方时才算落上去
+    if (this.vel.y > 0 && this.platforms.length) {
+      const before = prevY + ey;
+      const after = this.pos.y + ey;
+      let best: Platform | null = null;
+      for (const p of this.platforms) {
+        if (before > p.y + 0.5 || after < p.y) continue;
+        if (this.pos.x < p.x0 || this.pos.x > p.x1 || !this.hasHeadroom(p)) continue;
+        if (!best || p.y < best.y) best = p;
+      }
+      if (best) {
+        this.pos.y = best.y - ey;
+        this.hitFloor(best);
+        return;
+      }
+    }
 
     if (this.pos.y + ey >= bottom && this.vel.y > 0) {
       this.pos.y = bottom - ey;
@@ -588,14 +630,23 @@ export class Pet {
     }
   }
 
-  private hitFloor() {
+  /** 落到屏幕底部（p = null）或某个窗口顶边上 */
+  private hitFloor(p: Platform | null = null) {
     const T = this.tuning;
     const impact = this.vel.y;
     const vx = this.vel.x;
-    const contact = { x: this.pos.x, y: this.bounds.bottom };
+    const floorY = p ? p.y : this.bounds.bottom;
+    const contact = { x: this.pos.x, y: floorY };
+    const stand = (opts?: { keepRot?: boolean }) => {
+      this.side = 'floor';
+      this.support = p ? { ...p } : null;
+      this.attach('floor', undefined, opts);
+      const c = this.carrier;
+      this.carryVel = p && c.id === p.id ? { x: c.vx, y: c.vy } : { x: 0, y: 0 };
+    };
 
     if (impact >= T.splatSpeed) {
-      this.attach('floor');
+      stand();
       this.setMode('splat', T.splatHold);
       this.hitstop = T.hitstopSplat;
       this.dizzy = Math.max(this.dizzy, T.splatHold + 1.2);
@@ -605,9 +656,9 @@ export class Pet {
     }
     if (Math.abs(vx) >= T.rollSpeed && Math.abs(vx) >= impact * T.rollBias) {
       const rot = this.rot;
-      this.attach('floor', undefined, { keepRot: true });
+      stand({ keepRot: true });
       this.rot = rot;
-      this.pos.y = this.bounds.bottom - this.rollRadius;
+      this.pos.y = floorY - this.rollRadius;
       this.vel.x = vx;
       this.setMode('roll');
       this.kickSquash(impact * 0.6, 'floor');
@@ -615,7 +666,7 @@ export class Pet {
       return;
     }
     if (impact >= T.heroSpeed) {
-      this.attach('floor');
+      stand();
       this.setMode('hero', T.heroHold);
       this.hitstop = T.hitstopHero;
       this.kickSquash(impact, 'floor');
@@ -633,7 +684,7 @@ export class Pet {
         return;
       }
     }
-    this.attach('floor');
+    stand();
     this.setMode('land', T.softLandHold);
     this.kickSquash(impact, 'floor');
     this.impact('soft', contact, NORMAL.floor, impact);
@@ -694,8 +745,19 @@ export class Pet {
     this.pos.x += this.vel.x * dt;
     this.rot += (this.vel.x / this.rollRadius) * dt;
 
+    // 滚出窗口边缘：带着速度掉下去，继续转
+    const sup = this.support;
+    if (sup && (this.pos.x < sup.x0 || this.pos.x > sup.x1)) {
+      const vx = this.vel.x;
+      this.setMode('air');
+      this.vel = { x: vx, y: 0 };
+      this.angVel = vx / this.rollRadius;
+      return;
+    }
+
     const r = this.rollRadius;
-    const { left, right, bottom } = this.bounds;
+    const { left, right } = this.bounds;
+    const bottom = this.floorY;
     if (this.pos.x - r <= left && this.vel.x < 0) {
       this.pos.x = left + r;
       this.vel.x = -this.vel.x * T.wallRestitution;
@@ -756,8 +818,19 @@ export class Pet {
       const speed = this.side === 'floor' ? T.walkSpeed : T.climbSpeed;
       const [lo, hi] = this.sRange(this.side);
       const s = this.sOf(this.side) + this.dir * speed * dt;
-      if (s <= lo || s >= hi) {
-        this.atCorner(s <= lo ? 'lo' : 'hi');
+      const sup = this.support;
+      if (sup && (s <= sup.x0 || s >= sup.x1)) {
+        // 走到窗口边缘：跳下去或者掉头
+        if (this.rng() < T.stepOffChance) {
+          this.setMode('air');
+          this.vel = { x: this.dir * T.walkSpeed * 2, y: -260 };
+          this.events.push({ type: 'leap' });
+          return;
+        }
+        this.dir = (s <= sup.x0 ? 1 : -1) as 1 | -1;
+      } else if (s <= lo || s >= hi) {
+        if (sup) this.dir = (s <= lo ? 1 : -1) as 1 | -1;
+        else this.atCorner(s <= lo ? 'lo' : 'hi');
       } else {
         this.pos = this.surfacePos(this.side, s);
       }
@@ -765,12 +838,43 @@ export class Pet {
 
     if (this.modeTime >= this.modeDuration) {
       if (this.mode === 'idle' && this.dizzy <= 0) {
+        if (this.side === 'floor' && this.rng() < T.platformJumpChance && this.jumpToPlatform()) return;
         this.setMode('walk', rand(T.walkMin, T.walkMax, this.rng));
         this.dir = this.rng() < 0.5 ? 1 : -1;
       } else {
         this.setMode('idle', rand(T.idleMin, T.idleMax, this.rng));
       }
     }
+  }
+
+  /** 跳上附近一个更高的窗口顶边。没有合适的返回 false。 */
+  private jumpToPlatform(): boolean {
+    const T = this.tuning;
+    const feet = this.pos.y + this.halfH;
+    const hw = this.halfW;
+    const reachable = this.platforms.filter((p) => {
+      const rise = feet - p.y;
+      if (rise < 40 || rise > T.platformJumpMax || p.id === this.support?.id) return false;
+      if (!this.hasHeadroom(p) || p.x1 - p.x0 < hw * 2) return false;
+      const tx = clamp(this.pos.x, p.x0 + hw, p.x1 - hw);
+      return Math.abs(tx - this.pos.x) < 700;
+    });
+    if (!reachable.length) return false;
+    const p = reachable[Math.floor(this.rng() * reachable.length)];
+    const tx = clamp(this.pos.x, p.x0 + hw, p.x1 - hw);
+
+    // 弹道：多跳 60px 再落下。顶点附近重力变小会多滞空一会儿，也算进去。
+    const g = T.gravity;
+    const extra = 60;
+    const vy = -Math.sqrt(2 * g * (feet - p.y + extra));
+    const tUp = -vy / g;
+    const tApex = ((2 * T.apexSpeed) / g) * (1 / Math.max(0.05, T.apexGravityMul) - 1);
+    const tDown = Math.sqrt((2 * extra) / (g * T.fallGravityMul));
+    this.setMode('air');
+    this.vel = { x: (tx - this.pos.x) / (tUp + tApex + tDown), y: vy };
+    this.angVel = 0;
+    this.events.push({ type: 'leap' });
+    return true;
   }
 
   private atCorner(end: 'lo' | 'hi') {
@@ -835,11 +939,20 @@ export class Pet {
 
   // ---------- 面上坐标 ----------
 
+  /** 当前脚下的地面高度：窗口顶边或屏幕底 */
+  get floorY(): number {
+    return this.support ? this.support.y : this.bounds.bottom;
+  }
+
   private sRange(side: Side): [number, number] {
     const { left, top, right, bottom } = this.bounds;
     const hw = this.halfW;
-    const [lo, hi] =
-      side === 'floor' || side === 'ceiling' ? [left + hw, right - hw] : [top + hw, bottom - hw];
+    let [lo, hi] = side === 'floor' || side === 'ceiling' ? [left + hw, right - hw] : [top + hw, bottom - hw];
+    // 站在窗口顶上时，身体中心可以走到边缘（一半身子悬空）
+    if (side === 'floor' && this.support) {
+      lo = Math.max(lo, this.support.x0);
+      hi = Math.min(hi, this.support.x1);
+    }
     return [lo, Math.max(lo, hi)];
   }
 
@@ -848,11 +961,11 @@ export class Pet {
   }
 
   private surfacePos(side: Side, s: number): Vec2 {
-    const { left, top, right, bottom } = this.bounds;
+    const { left, top, right } = this.bounds;
     const hh = this.halfH;
     switch (side) {
       case 'floor':
-        return { x: s, y: bottom - hh };
+        return { x: s, y: this.floorY - hh };
       case 'ceiling':
         return { x: s, y: top + hh };
       case 'left':
@@ -867,6 +980,7 @@ export class Pet {
     const oldPos = { ...this.pos };
     const oldRot = this.rot;
     this.side = side;
+    if (side !== 'floor') this.support = null;
     const [lo, hi] = this.sRange(side);
     this.pos = this.surfacePos(side, clamp(s ?? this.sOf(side), lo, hi));
     this.vel = { x: 0, y: 0 };

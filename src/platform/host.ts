@@ -2,6 +2,7 @@
 // 方便不开 Tauri 也能调物理手感（`npm run dev` 后打开 / 和 /debug.html）。
 
 import type { Vec2 } from '../engine/math';
+import type { Platform } from '../engine/pet';
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -66,67 +67,105 @@ export async function openDebugPanel() {
   }
 }
 
-/** 覆盖层专用：点击穿透 + 全局光标位置 */
+export type HitRect = [x0: number, y0: number, x1: number, y1: number];
+
+/** 被追踪窗口的一次位置采样（覆盖层 CSS 像素） */
+export interface CarrierSample {
+  id: number;
+  /** 毫秒，与 OverlayHost.clock() 同一时钟 */
+  t: number;
+  left: number;
+  top: number;
+  right: number;
+  /** 窗口没了（关闭、最小化、切到别的虚拟桌面） */
+  gone: boolean;
+}
+
+/**
+ * 覆盖层与桌面的接口。Tauri 下由 Rust 的观察线程负责光标、点击穿透、窗口枚举和全屏检测，
+ * 只在有变化时推送事件；浏览器预览下退化为页面内的光标，没有窗口平台。
+ */
 export interface OverlayHost {
   /** 最近一次已知的光标位置（覆盖层 CSS 坐标），未知为 null */
   cursor(): Vec2 | null;
-  /** 每帧调用：刷新光标位置（Tauri 下异步轮询，不阻塞） */
-  poll(): void;
-  setClickThrough(on: boolean): void;
+  /** 光标是否在宠物上（此时覆盖层不穿透，可以抓） */
+  hovering(): boolean;
+  /** 宠物的可点击区域；相同的值会被去重 */
+  setHitRect(r: HitRect | null): void;
+  setDragging(on: boolean): void;
+  /** 开始/停止高频追踪某个窗口（宠物脚下那个） */
+  setCarrier(id: number | null): void;
+  onPlatforms(cb: (list: Platform[]) => void): void;
+  onCarrier(cb: (s: CarrierSample) => void): void;
+  onDnd(cb: (hidden: boolean, reason: string) => void): void;
+  /** 与 CarrierSample.t 同一时钟的"现在"（ms） */
+  clock(): number;
+  /** 监听都挂好了，请求原生侧把当前状态全部推一遍 */
+  ready(): void;
 }
+
+const sameRect = (a: HitRect | null, b: HitRect | null) =>
+  a === b || (a !== null && b !== null && a.every((v, i) => Math.abs(v - b[i]) < 0.5));
 
 export async function createOverlayHost(): Promise<OverlayHost> {
   if (!isTauri) {
     let cur: Vec2 | null = null;
+    let hit: HitRect | null = null;
     window.addEventListener('pointermove', (e) => (cur = { x: e.clientX, y: e.clientY }));
     window.addEventListener('pointerleave', () => (cur = null));
-    return { cursor: () => cur, poll: () => {}, setClickThrough: () => {} };
+    return {
+      cursor: () => cur,
+      hovering: () => !!cur && !!hit && cur.x >= hit[0] && cur.x <= hit[2] && cur.y >= hit[1] && cur.y <= hit[3],
+      setHitRect: (r) => (hit = r),
+      setDragging: () => {},
+      setCarrier: () => {},
+      onPlatforms: () => {},
+      onCarrier: () => {},
+      onDnd: () => {},
+      clock: () => performance.now(),
+      ready: () => {},
+    };
   }
 
-  const { getCurrentWindow, cursorPosition } = await import('@tauri-apps/api/window');
-  const win = getCurrentWindow();
-  let origin = await win.innerPosition();
-  let scaleFactor = await win.scaleFactor();
-  void win.onMoved(async () => (origin = await win.innerPosition()));
-  void win.onScaleChanged((e) => (scaleFactor = e.payload.scaleFactor));
+  const { invoke } = await import('@tauri-apps/api/core');
+  const { listen } = await import('@tauri-apps/api/event');
 
   let cur: Vec2 | null = null;
-  let pending = false;
-  // 不能假设窗口当前是穿透的：页面热重载时窗口可能正处于"可点击"状态，
-  // 如果不强制设一次，整个桌面都会被这个透明窗口挡住。
-  await win.setIgnoreCursorEvents(true);
-  let ignoring = true;
-  let wanted = true;
-  let applying = false;
+  let hover = false;
+  let lastHit: HitRect | null = null;
+  // Rust 时钟 = performance.now() - offset；取观测到的最小延迟作为偏移
+  let offset = Infinity;
+  const platformCbs: ((list: Platform[]) => void)[] = [];
+  const carrierCbs: ((s: CarrierSample) => void)[] = [];
+  const dndCbs: ((hidden: boolean, reason: string) => void)[] = [];
 
-  const applyClickThrough = async () => {
-    if (applying) return;
-    applying = true;
-    while (ignoring !== wanted) {
-      const target = wanted;
-      try {
-        await win.setIgnoreCursorEvents(target);
-        ignoring = target;
-      } catch {
-        break;
-      }
-    }
-    applying = false;
-  };
+  await Promise.all([
+    listen<Vec2>('desk-cursor', (e) => (cur = e.payload)),
+    listen<boolean>('desk-hover', (e) => (hover = e.payload)),
+    listen<Platform[]>('desk-platforms', (e) => platformCbs.forEach((cb) => cb(e.payload))),
+    listen<CarrierSample>('desk-carrier', (e) => {
+      offset = Math.min(offset, performance.now() - e.payload.t);
+      carrierCbs.forEach((cb) => cb(e.payload));
+    }),
+    listen<{ hidden: boolean; reason: string }>('desk-dnd', (e) =>
+      dndCbs.forEach((cb) => cb(e.payload.hidden, e.payload.reason)),
+    ),
+  ]);
 
   return {
     cursor: () => cur,
-    poll() {
-      if (pending) return;
-      pending = true;
-      cursorPosition()
-        .then((p) => (cur = { x: (p.x - origin.x) / scaleFactor, y: (p.y - origin.y) / scaleFactor }))
-        .catch(() => {})
-        .finally(() => (pending = false));
+    hovering: () => hover,
+    setHitRect(r) {
+      if (sameRect(r, lastHit)) return;
+      lastHit = r;
+      void invoke('desk_set_hit', { rect: r });
     },
-    setClickThrough(on) {
-      wanted = on;
-      if (wanted !== ignoring) void applyClickThrough();
-    },
+    setDragging: (on) => void invoke('desk_set_dragging', { on }),
+    setCarrier: (id) => void invoke('desk_set_carrier', { id }),
+    onPlatforms: (cb) => platformCbs.push(cb),
+    onCarrier: (cb) => carrierCbs.push(cb),
+    onDnd: (cb) => dndCbs.push(cb),
+    clock: () => (Number.isFinite(offset) ? performance.now() - offset : performance.now()),
+    ready: () => void invoke('desk_ready'),
   };
 }

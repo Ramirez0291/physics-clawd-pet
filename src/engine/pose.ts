@@ -235,6 +235,8 @@ export function bodyTransform(pet: Pet, unit: number): Affine {
     px = cx - n.x * r;
     py = cy - n.y * r;
   }
+  // 站在移动窗口上的惯性后仰，同样绕脚底转
+  if (Math.abs(pet.lean) > 1e-3) deform = deform ? mul(deform, rotate(pet.lean)) : rotate(pet.lean);
 
   const s = clamp(pet.squash, -T.maxSquash, T.maxSquash);
   if (Math.abs(s) > 1e-3) {
