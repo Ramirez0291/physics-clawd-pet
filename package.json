@@ -1,0 +1,25 @@
+{
+  "name": "physics-clawd-pet",
+  "version": "0.1.0",
+  "description": "A desktop pet with exaggerated cartoon physics",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "tauri": "tauri",
+    "icon": "node scripts/make-icon.mjs && tauri icon app-icon.png"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  }
+}

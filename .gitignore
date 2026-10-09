@@ -1,0 +1,7 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+# 由 scripts/make-icon.mjs 生成，`npm run icon` 会重新生成
+app-icon.png
+*.log

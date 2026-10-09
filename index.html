@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clawd</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        user-select: none;
+      }
+      #stage {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        display: block;
+        touch-action: none;
+      }
+      /* 以下只在浏览器预览时生效 */
+      body.browser {
+        background:
+          radial-gradient(circle at 20% 15%, #5b7fa6 0, transparent 45%),
+          radial-gradient(circle at 85% 80%, #f0d9c4 0, transparent 40%),
+          linear-gradient(135deg, #2d3e55, #6b7f99 55%, #d8c7b5);
+      }
+      .preview-bar {
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px 12px;
+        border-radius: 8px;
+        background: rgba(20, 20, 19, 0.75);
+        color: #f4f1ea;
+        font: 13px/1.4 system-ui, sans-serif;
+        z-index: 1;
+        pointer-events: auto;
+      }
+      .preview-bar button {
+        font: inherit;
+        border: 0;
+        border-radius: 6px;
+        padding: 2px 8px;
+        background: #d77757;
+        color: #fff;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+    <script type="module" src="/src/overlay/main.ts"></script>
+  </body>
+</html>

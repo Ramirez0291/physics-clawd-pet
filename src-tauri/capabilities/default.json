@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Overlay and debug panel windows",
+  "windows": ["overlay", "debug"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-ignore-cursor-events",
+    "core:window:allow-set-always-on-top"
+  ]
+}

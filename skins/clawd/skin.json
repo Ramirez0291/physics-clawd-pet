@@ -1,0 +1,21 @@
+{
+  "id": "clawd",
+  "name": "Clawd",
+  "description": "Claude Code 的吉祥物 Clawd（同人皮肤，非官方）",
+  "grid": [16, 10],
+  "palette": {
+    "body": "#D77757",
+    "eye": "#141413"
+  },
+  "parts": [
+    { "id": "leg0", "role": "leg", "rect": [3, 8, 1, 2], "color": "body" },
+    { "id": "leg1", "role": "leg", "rect": [5, 8, 1, 2], "color": "body" },
+    { "id": "leg2", "role": "leg", "rect": [10, 8, 1, 2], "color": "body" },
+    { "id": "leg3", "role": "leg", "rect": [12, 8, 1, 2], "color": "body" },
+    { "id": "armL", "role": "arm", "rect": [0, 4, 2, 2], "color": "body" },
+    { "id": "armR", "role": "arm", "rect": [14, 4, 2, 2], "color": "body" },
+    { "id": "body", "role": "body", "rect": [2, 0, 12, 8], "color": "body" },
+    { "id": "eyeL", "role": "eye", "rect": [4, 2, 1, 2], "color": "eye" },
+    { "id": "eyeR", "role": "eye", "rect": [11, 2, 1, 2], "color": "eye" }
+  ]
+}

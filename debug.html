@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clawd 调试面板</title>
+    <link rel="stylesheet" href="/src/debug/debug.css" />
+  </head>
+  <body>
+    <header>
+      <div id="status" class="status">等待覆盖层连接…</div>
+      <div class="toolbar">
+        <button id="pause" title="空格">暂停</button>
+        <button id="step" title="→ 键：前进一帧">单步</button>
+        <button id="reset">叫回来</button>
+        <button id="replay" title="R 键：用完全相同的初速度再扔一次">重放上次投掷</button>
+      </div>
+      <div class="toolbar presets">
+        <span>测试投掷</span>
+        <button data-preset="drop">高空坠落</button>
+        <button data-preset="throwRight">向右猛甩</button>
+        <button data-preset="wallLeft">砸左墙</button>
+        <button data-preset="ceiling">上抛天花板</button>
+        <button data-preset="slam">斜砸地面</button>
+        <button data-preset="roll">平飞翻滚</button>
+      </div>
+      <div class="filter">
+        <input id="search" type="search" placeholder="搜索参数…" />
+        <label><input id="changedOnly" type="checkbox" /> 只看改过的</label>
+      </div>
+    </header>
+    <main id="params"></main>
+    <footer>
+      <div class="toolbar">
+        <button id="save" class="primary">保存</button>
+        <button id="defaults">全部恢复默认</button>
+        <button id="copy">复制 JSON</button>
+        <button id="importToggle">导入 JSON</button>
+        <label id="pinWrap"><input id="pin" type="checkbox" /> 面板置顶</label>
+      </div>
+      <div id="importBox" hidden>
+        <textarea id="importText" rows="5" placeholder="粘贴 JSON，只会覆盖认识的参数"></textarea>
+        <button id="importApply">应用</button>
+      </div>
+      <div id="note" class="note"></div>
+    </footer>
+    <script type="module" src="/src/debug/main.ts"></script>
+  </body>
+</html>
