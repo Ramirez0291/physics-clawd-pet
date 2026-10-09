@@ -10,8 +10,20 @@ import {
 } from './math';
 import type { Tuning } from './params';
 
-/** 宠物贴着的面。墙面用"屏幕边框"表示，M2 会加上其他窗口的顶边。 */
+/**
+ * 宠物贴着的面：屏幕边框的四条边。站在其他窗口顶上时也是 'floor'，
+ * 只是 support 指向那个窗口的顶边（见 Platform）。
+ */
 export type Side = 'floor' | 'ceiling' | 'left' | 'right';
+
+/** 一段可以站的窗口顶边（覆盖层 CSS 像素）。单向平台：只能从上面落上去。 */
+export interface Platform {
+  /** 窗口句柄 */
+  id: number;
+  x0: number;
+  x1: number;
+  y: number;
+}
 
 export type Mode =
   | 'idle' // 站着
@@ -40,7 +52,9 @@ export type PetEvent =
   | { type: 'throw'; vx: number; vy: number }
   | { type: 'poke' }
   | { type: 'popup' }
-  | { type: 'leap' };
+  | { type: 'leap' }
+  | { type: 'fling'; x: number; y: number; vx: number; vy: number }
+  | { type: 'dropped' };
 
 /** 一次投掷的初始条件，用于"重放上次投掷"做 A/B 对比 */
 export interface LaunchState {
@@ -122,6 +136,17 @@ export class Pet {
   lastLaunch: LaunchState | null = null;
   events: PetEvent[] = [];
 
+  /** 所有可站的窗口顶边 */
+  platforms: Platform[] = [];
+  /** 正站在哪段窗口顶边上（null = 屏幕边框） */
+  support: Platform | null = null;
+  /** 被追踪窗口（通常就是脚下那个）的最新位置和速度 */
+  carrier = { id: NaN, left: NaN, top: NaN, vx: 0, vy: 0 };
+  /** 站在移动窗口上时宠物自己的速度：靠"抓地力"追赶窗口速度，追不上就被甩飞 */
+  carryVel: Vec2 = { x: 0, y: 0 };
+  /** 惯性后仰（弧度，绕脚底） */
+  lean = 0;
+
   private hold: Hold | null = null;
   private rollDust = 0;
 
@@ -164,6 +189,72 @@ export class Pet {
     const sizeChanged = t.petScale !== this.tuning.petScale;
     this.tuning = t;
     if (sizeChanged) this.resnap();
+  }
+
+  /** 窗口顶边列表刷新（约 10Hz）。脚下那段没了（窗口关了/被挡住）就掉下去。 */
+  setPlatforms(list: Platform[]) {
+    this.platforms = list;
+    const s = this.support;
+    if (!s) return;
+    const x = this.pos.x;
+    const match = list.find((p) => p.id === s.id && x >= p.x0 - 2 && x <= p.x1 + 2 && Math.abs(p.y - s.y) < 60);
+    if (!match) {
+      this.loseSupport();
+      return;
+    }
+    this.support = { ...match };
+    if (this.side === 'floor' && this.grounded) {
+      this.pos.y = match.y - (this.mode === 'roll' ? this.rollRadius : this.halfH);
+    }
+  }
+
+  /**
+   * 被追踪窗口的最新位置（左上角）和速度。每帧调用；位置没变就什么也不做。
+   * 宠物站在上面时跟着平移；窗口顶边列表里属于它的几段也一起平移，
+   * 这样在下一次列表刷新之前，被抛起的宠物也能落回正在移动的窗口上。
+   */
+  updateCarrier(id: number, left: number, top: number, vx: number, vy: number) {
+    const c = this.carrier;
+    const same = c.id === id && Number.isFinite(c.left);
+    const dx = same ? left - c.left : 0;
+    const dy = same ? top - c.top : 0;
+    c.id = id;
+    c.left = left;
+    c.top = top;
+    c.vx = vx;
+    c.vy = vy;
+    if (!dx && !dy) return;
+    for (const p of this.platforms) {
+      if (p.id !== id) continue;
+      p.x0 += dx;
+      p.x1 += dx;
+      p.y += dy;
+    }
+    const s = this.support;
+    if (s && s.id === id) {
+      s.x0 += dx;
+      s.x1 += dx;
+      s.y += dy;
+      if (this.grounded) {
+        this.pos.x += dx;
+        this.pos.y += dy;
+      }
+    }
+  }
+
+  /** 被追踪的窗口消失了（关闭、最小化、切到别的虚拟桌面） */
+  carrierGone(id: number) {
+    this.platforms = this.platforms.filter((p) => p.id !== id);
+    if (this.carrier.id === id) this.carrier = { id: NaN, left: NaN, top: NaN, vx: 0, vy: 0 };
+    if (this.support?.id === id) this.loseSupport();
+  }
+
+  private loseSupport() {
+    this.setMode('air');
+    this.vel = { x: 0, y: 0 };
+    this.angVel = 0;
+    this.emote = { kind: '!', t: 0 };
+    this.events.push({ type: 'dropped' });
   }
 
   /** 尺寸或边界变化后，把宠物放回合法位置 */
@@ -330,6 +421,14 @@ export class Pet {
     this.visOffset.y -= this.visOffset.y * k;
     this.visRot -= this.visRot * k;
 
+    const carried =
+      this.support !== null && this.grounded && this.mode !== 'roll' && this.carrier.id === this.support.id;
+    if (carried) {
+      if (this.stepCarry(dt)) return;
+    } else {
+      this.lean -= this.lean * approach(10, dt);
+    }
+
     switch (this.mode) {
       case 'held':
         this.stepHeld(dt);
@@ -353,6 +452,47 @@ export class Pet {
     this.mode = m;
     this.modeTime = 0;
     this.modeDuration = duration;
+    if (m === 'air' || m === 'held') this.support = null;
+  }
+
+  /**
+   * 站在移动的窗口上。宠物有自己的速度 carryVel：
+   * - 竖直：重力往下拉，窗口顶着不让穿过去；窗口往下掉得比重力还快、或者往上提完急停，宠物就离开窗口；
+   * - 水平：用有限的"抓地力"追赶窗口速度（起步时抓得牢，急停时抓不住），差太多就被甩飞。
+   * 返回 true 表示被甩飞了。
+   */
+  private stepCarry(dt: number): boolean {
+    const T = this.tuning;
+    const c = this.carrier;
+    const vp = this.carryVel;
+
+    vp.y += T.gravity * dt;
+    if (vp.y > c.vy) vp.y = c.vy;
+
+    const sameDir = Math.sign(c.vx) === Math.sign(vp.x || c.vx);
+    const speedingUp = sameDir && Math.abs(c.vx) > Math.abs(vp.x);
+    const grip = (speedingUp ? T.gripStart : T.gripStop) * dt;
+    vp.x += clamp(c.vx - vp.x, -grip, grip);
+
+    const slip = Math.abs(c.vx - vp.x);
+    const lift = c.vy - vp.y;
+    if (slip > T.flingSlip || lift > T.flingLift) {
+      const vx = vp.x * T.flingBoost;
+      let vy = vp.y * T.flingBoost;
+      if (slip > T.flingSlip) vy = Math.min(vy, -T.flingHop);
+      const feet = { x: this.pos.x, y: this.pos.y + this.halfH };
+      this.lean = 0;
+      this.launch({ x: this.pos.x, y: this.pos.y, vx, vy, rot: this.rot, angVel: vx * T.throwSpin * 1.5 });
+      this.emote = { kind: '!', t: 0 };
+      this.events.push({ type: 'fling', x: feet.x, y: feet.y, vx, vy });
+      return true;
+    }
+
+    // 相对窗口打滑
+    this.pos.x += (vp.x - c.vx) * dt;
+    // 窗口往右加速时脚被带走、身体往左仰（逆时针，负角度）
+    this.lean = clamp(-(c.vx - vp.x) * T.carryLean, -0.6, 0.6);
+    return false;
   }
 
   private stepHeld(dt: number) {

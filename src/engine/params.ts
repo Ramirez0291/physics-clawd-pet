@@ -54,6 +54,19 @@ export const DEFAULT_TUNING = {
   surfaceStayMin: 3,
   surfaceStayMax: 9,
 
+  // 窗口平台
+  gripStart: 30000,
+  gripStop: 5000,
+  flingSlip: 500,
+  flingLift: 260,
+  flingBoost: 1.25,
+  flingHop: 350,
+  carryLean: 0.0006,
+  carrierWindowMs: 40,
+  stepOffChance: 0.35,
+  platformJumpChance: 0.3,
+  platformJumpMax: 450,
+
   // 顿帧
   hitstopHero: 0.09,
   hitstopSplat: 0.14,
@@ -171,6 +184,18 @@ export const PARAM_DEFS: ParamDef[] = [
   r('墙与天花板', 'wallJumpSpeed', '蹬墙跳速度', 100, 3000, 25),
   r('墙与天花板', 'surfaceStayMin', '墙上最短停留', 0, 30, 0.5),
   r('墙与天花板', 'surfaceStayMax', '墙上最长停留', 0, 60, 0.5),
+
+  r('窗口平台', 'gripStart', '起步抓地力', 1000, 100000, 500, '窗口加速时宠物跟得上的最大加速度，越大越不容易被"抽走"'),
+  r('窗口平台', 'gripStop', '急停抓地力', 500, 50000, 250, '窗口减速时的抓地力，越小越容易被甩飞'),
+  r('窗口平台', 'flingSlip', '甩飞阈值', 50, 3000, 10, '宠物和窗口水平相对速度超过它就飞出去'),
+  r('窗口平台', 'flingLift', '抛起阈值', 20, 2000, 10, '窗口往上提再急停时，竖直相对速度超过它就被抛起'),
+  r('窗口平台', 'flingBoost', '甩飞夸张倍率', 0.5, 3, 0.05),
+  r('窗口平台', 'flingHop', '甩飞附带上跳', 0, 1500, 10),
+  r('窗口平台', 'carryLean', '惯性后仰', 0, 0.003, 0.0001),
+  r('窗口平台', 'carrierWindowMs', '窗口速度采样(ms)', 16, 200, 4),
+  r('窗口平台', 'stepOffChance', '走到边缘跳下概率', 0, 1, 0.05),
+  r('窗口平台', 'platformJumpChance', '发呆时跳上窗口概率', 0, 1, 0.05),
+  r('窗口平台', 'platformJumpMax', '最高能跳多高', 50, 1200, 10),
 
   r('顿帧', 'hitstopHero', '英雄落地顿帧', 0, 0.4, 0.005),
   r('顿帧', 'hitstopSplat', '脸着地顿帧', 0, 0.4, 0.005),

@@ -1,19 +1,42 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder,
 };
 
-const OVERLAY: &str = "overlay";
+#[cfg(windows)]
+mod desktop;
+#[cfg(windows)]
+mod watcher;
+
+#[cfg(not(windows))]
+mod watcher {
+    use std::sync::{Arc, Mutex};
+    pub const OVERLAY: &str = "overlay";
+    #[derive(Default)]
+    pub struct DeskState {
+        pub hit: Option<[f64; 4]>,
+        pub dragging: bool,
+        pub carrier: Option<isize>,
+        pub manual_hidden: bool,
+        pub resync: bool,
+    }
+    pub type Shared = Arc<Mutex<DeskState>>;
+}
+
+use watcher::{DeskState, Shared, OVERLAY};
+
 const DEBUG: &str = "debug";
 
 /// 覆盖层：铺满主屏的工作区（不含任务栏）。
 /// 故意不等于整块屏幕，避免被系统当成全屏程序（压住任务栏、吞掉通知）。
-fn create_overlay(app: &AppHandle) -> tauri::Result<()> {
+fn create_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let monitor = match app.primary_monitor()? {
         Some(m) => m,
         None => app
@@ -41,7 +64,20 @@ fn create_overlay(app: &AppHandle) -> tauri::Result<()> {
     win.set_size(PhysicalSize::new(area.size.width, area.size.height))?;
     win.set_ignore_cursor_events(true)?;
     win.show()?;
-    Ok(())
+
+    #[cfg(windows)]
+    {
+        let rect = desktop::Rect {
+            left: area.position.x,
+            top: area.position.y,
+            right: area.position.x + area.size.width as i32,
+            bottom: area.position.y + area.size.height as i32,
+        };
+        let hwnd = win.hwnd()?.0 as isize;
+        let shared = app.state::<Shared>().inner().clone();
+        watcher::spawn(app.clone(), shared, hwnd, rect);
+    }
+    Ok(win)
 }
 
 fn show_debug(app: &AppHandle) -> tauri::Result<()> {
@@ -91,12 +127,41 @@ fn open_debug(app: AppHandle) -> Result<(), String> {
     show_debug(&app).map_err(|e| e.to_string())
 }
 
+// ---------- 覆盖层 → 观察线程 ----------
+
+/// 宠物的可点击区域（覆盖层 CSS 像素），None 表示没有
+#[tauri::command]
+fn desk_set_hit(state: State<Shared>, rect: Option<[f64; 4]>) {
+    state.lock().unwrap().hit = rect;
+}
+
+#[tauri::command]
+fn desk_set_dragging(state: State<Shared>, on: bool) {
+    state.lock().unwrap().dragging = on;
+}
+
+/// 宠物站在哪个窗口上（窗口句柄），None 表示没站在窗口上
+#[tauri::command]
+fn desk_set_carrier(state: State<Shared>, id: Option<i64>) {
+    state.lock().unwrap().carrier = id.map(|v| v as isize);
+}
+
+/// 前端（重新）加载完成，请把当前状态全部重发
+#[tauri::command]
+fn desk_ready(state: State<Shared>) {
+    state.lock().unwrap().resync = true;
+}
+
+struct HideItem(MenuItem<tauri::Wry>);
+
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let debug = MenuItem::with_id(app, "debug", "调试面板", true, None::<&str>)?;
     let reset = MenuItem::with_id(app, "reset", "把 Clawd 叫回来", true, None::<&str>)?;
+    let hide = MenuItem::with_id(app, "hide", "隐藏 Clawd", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&debug, &reset, &sep, &quit])?;
+    let menu = Menu::with_items(app, &[&debug, &reset, &hide, &sep, &quit])?;
+    app.manage(HideItem(hide));
 
     let mut builder = TrayIconBuilder::with_id("main")
         .tooltip("Clawd")
@@ -108,6 +173,16 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             }
             "reset" => {
                 let _ = app.emit("debug-cmd", serde_json::json!({ "cmd": "reset" }));
+            }
+            "hide" => {
+                let hidden = {
+                    let state = app.state::<Shared>();
+                    let mut s = state.lock().unwrap();
+                    s.manual_hidden = !s.manual_hidden;
+                    s.manual_hidden
+                };
+                let item = &app.state::<HideItem>().0;
+                let _ = item.set_text(if hidden { "显示 Clawd" } else { "隐藏 Clawd" });
             }
             "quit" => app.exit(0),
             _ => {}
@@ -132,7 +207,16 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![load_tuning, save_tuning, open_debug])
+        .manage::<Shared>(Arc::new(Mutex::new(DeskState::default())))
+        .invoke_handler(tauri::generate_handler![
+            load_tuning,
+            save_tuning,
+            open_debug,
+            desk_set_hit,
+            desk_set_dragging,
+            desk_set_carrier,
+            desk_ready
+        ])
         .setup(|app| {
             let handle = app.handle();
             create_overlay(handle)?;
