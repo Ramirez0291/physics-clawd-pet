@@ -2,7 +2,7 @@
 // 方便不开 Tauri 也能调物理手感（`npm run dev` 后打开 / 和 /debug.html）。
 
 import type { Vec2 } from '../engine/math';
-import type { Platform } from '../engine/pet';
+import type { Bounds, Platform } from '../engine/pet';
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -98,6 +98,8 @@ export interface OverlayHost {
   onPlatforms(cb: (list: Platform[]) => void): void;
   onCarrier(cb: (s: CarrierSample) => void): void;
   onDnd(cb: (hidden: boolean, reason: string) => void): void;
+  /** 当前有键盘焦点的文本输入框（覆盖层 CSS 像素），没有为 null */
+  onInput(cb: (zone: Bounds | null) => void): void;
   /** 与 CarrierSample.t 同一时钟的"现在"（ms） */
   clock(): number;
   /** 监听都挂好了，请求原生侧把当前状态全部推一遍 */
@@ -113,6 +115,21 @@ export async function createOverlayHost(): Promise<OverlayHost> {
     let hit: HitRect | null = null;
     window.addEventListener('pointermove', (e) => (cur = { x: e.clientX, y: e.clientY }));
     window.addEventListener('pointerleave', () => (cur = null));
+    // 预览页里的输入框获得焦点时，当成"正在输入的输入框"
+    const inputCbs: ((zone: Bounds | null) => void)[] = [];
+    const focusedZone = (): Bounds | null => {
+      const el = document.activeElement;
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return null;
+      const r = el.getBoundingClientRect();
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    };
+    const emitInput = () => {
+      const z = focusedZone();
+      inputCbs.forEach((cb) => cb(z));
+    };
+    window.addEventListener('focusin', emitInput);
+    window.addEventListener('focusout', () => setTimeout(emitInput, 0));
+    window.addEventListener('resize', emitInput);
     return {
       cursor: () => cur,
       hovering: () => !!cur && !!hit && cur.x >= hit[0] && cur.x <= hit[2] && cur.y >= hit[1] && cur.y <= hit[3],
@@ -122,6 +139,7 @@ export async function createOverlayHost(): Promise<OverlayHost> {
       onPlatforms: () => {},
       onCarrier: () => {},
       onDnd: () => {},
+      onInput: (cb) => inputCbs.push(cb),
       clock: () => performance.now(),
       ready: () => {},
     };
@@ -138,6 +156,7 @@ export async function createOverlayHost(): Promise<OverlayHost> {
   const platformCbs: ((list: Platform[]) => void)[] = [];
   const carrierCbs: ((s: CarrierSample) => void)[] = [];
   const dndCbs: ((hidden: boolean, reason: string) => void)[] = [];
+  const inputCbs: ((zone: Bounds | null) => void)[] = [];
 
   await Promise.all([
     listen<Vec2>('desk-cursor', (e) => (cur = e.payload)),
@@ -150,6 +169,7 @@ export async function createOverlayHost(): Promise<OverlayHost> {
     listen<{ hidden: boolean; reason: string }>('desk-dnd', (e) =>
       dndCbs.forEach((cb) => cb(e.payload.hidden, e.payload.reason)),
     ),
+    listen<Bounds | null>('desk-input', (e) => inputCbs.forEach((cb) => cb(e.payload))),
   ]);
 
   return {
@@ -165,6 +185,7 @@ export async function createOverlayHost(): Promise<OverlayHost> {
     onPlatforms: (cb) => platformCbs.push(cb),
     onCarrier: (cb) => carrierCbs.push(cb),
     onDnd: (cb) => dndCbs.push(cb),
+    onInput: (cb) => inputCbs.push(cb),
     clock: () => (Number.isFinite(offset) ? performance.now() - offset : performance.now()),
     ready: () => void invoke('desk_ready'),
   };

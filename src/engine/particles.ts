@@ -1,7 +1,7 @@
 import { rand } from './math';
 import type { ImpactTier, PetEvent } from './pet';
 
-export type ParticleKind = 'dust' | 'debris' | 'shock';
+export type ParticleKind = 'dust' | 'debris' | 'shock' | 'heart';
 
 export interface Particle {
   kind: ParticleKind;
@@ -25,6 +25,8 @@ export interface Particle {
 // 深浅两种烟尘颜色，浅色桌面和深色桌面上都看得见
 const DUST = ['#e9e1d5', '#9b8f82'];
 const DEBRIS = '#b45f43';
+const HEART = '#ff6b8a';
+const GOLD = ['#f5c542', '#b07d12', '#fff4b8'];
 
 const DUST_COUNT: Record<ImpactTier, number> = {
   soft: 3,
@@ -50,6 +52,51 @@ export class ParticleSystem {
     if (ev.type === 'impact') this.impact(ev.tier, ev.x, ev.y, ev.nx, ev.ny, ev.speed);
     else if (ev.type === 'rolling') this.rolling(ev.x, ev.y, ev.vx);
     else if (ev.type === 'fling') this.impact('bounce', ev.x, ev.y, 0, -1, Math.hypot(ev.vx, ev.vy));
+    else if (ev.type === 'heart') this.heart(ev.x, ev.y, ev.nx, ev.ny);
+    else if (ev.type === 'chomp') this.chomp(ev.x, ev.y, ev.nx, ev.ny);
+  }
+
+  /** 摸摸：头顶冒出一颗小爱心，慢慢飘走 */
+  private heart(x: number, y: number, nx: number, ny: number) {
+    const r = this.rng;
+    const life = rand(0.9, 1.3, r);
+    const side = rand(-60, 60, r);
+    this.push({
+      kind: 'heart',
+      x: x - ny * rand(-20, 20, r),
+      y: y + nx * rand(-20, 20, r),
+      vx: nx * 90 - ny * side,
+      vy: ny * 90 + nx * side,
+      life,
+      maxLife: life,
+      size: 1,
+      color: HEART,
+      drag: 1.5,
+      gravity: 0,
+    });
+  }
+
+  /** 咬金币：金屑往外蹦 */
+  private chomp(x: number, y: number, nx: number, ny: number) {
+    const r = this.rng;
+    for (let i = 0; i < 6; i++) {
+      const life = rand(0.35, 0.7, r);
+      const a = Math.atan2(ny, nx) + rand(-1.2, 1.2, r);
+      const sp = rand(180, 420, r);
+      this.push({
+        kind: 'debris',
+        x: x + rand(-6, 6, r),
+        y: y + rand(-6, 6, r),
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life,
+        maxLife: life,
+        size: 1,
+        color: GOLD[i % 3],
+        drag: 1,
+        gravity: 1800,
+      });
+    }
   }
 
   private push(p: Particle) {

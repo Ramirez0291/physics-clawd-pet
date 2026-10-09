@@ -13,6 +13,8 @@ use tauri::{
 #[cfg(windows)]
 mod desktop;
 #[cfg(windows)]
+mod input;
+#[cfg(windows)]
 mod watcher;
 
 #[cfg(not(windows))]
@@ -26,6 +28,7 @@ mod watcher {
         pub carrier: Option<isize>,
         pub manual_hidden: bool,
         pub resync: bool,
+        pub input_resync: bool,
     }
     pub type Shared = Arc<Mutex<DeskState>>;
 }
@@ -75,7 +78,8 @@ fn create_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         };
         let hwnd = win.hwnd()?.0 as isize;
         let shared = app.state::<Shared>().inner().clone();
-        watcher::spawn(app.clone(), shared, hwnd, rect);
+        watcher::spawn(app.clone(), shared.clone(), hwnd, rect);
+        input::spawn(app.clone(), shared, hwnd);
     }
     Ok(win)
 }
@@ -149,7 +153,9 @@ fn desk_set_carrier(state: State<Shared>, id: Option<i64>) {
 /// 前端（重新）加载完成，请把当前状态全部重发
 #[tauri::command]
 fn desk_ready(state: State<Shared>) {
-    state.lock().unwrap().resync = true;
+    let mut s = state.lock().unwrap();
+    s.resync = true;
+    s.input_resync = true;
 }
 
 struct HideItem(MenuItem<tauri::Wry>);

@@ -15,6 +15,9 @@ import {
 import { Renderer } from '../render/renderer';
 import { type SkinDef, loadSkin } from '../skin/types';
 
+/** 这些状态下动作幅度小，可以降帧省电 */
+const CALM_MODES = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin']);
+
 /** 固定物理步长：与显示器刷新率无关 */
 const STEP = 1 / 120;
 const MAX_STEPS = 24;
@@ -42,6 +45,9 @@ export interface Telemetry {
   /** 脚下窗口的速度 */
   carrierSpeed: number;
   platforms: number;
+  /** 正在输入的输入框 [left, top, right, bottom]，没有为 null */
+  input: [number, number, number, number] | null;
+  fleeing: boolean;
 }
 
 /** 可重复的测试投掷（相对屏幕尺寸），调参时用来做 A/B 对比 */
@@ -94,6 +100,7 @@ async function main() {
   // ---------- 桌面：窗口平台、脚下窗口追踪、全屏免打扰 ----------
 
   host.onPlatforms((list) => pet.setPlatforms(list));
+  host.onInput((zone) => pet.setInputZone(zone));
 
   const carrierSampler = new VelocitySampler(300);
   let carrierLatest: CarrierSample | null = null;
@@ -205,6 +212,11 @@ async function main() {
         if (make) pet.launch(make(w, h));
         break;
       }
+      case 'act':
+        if (msg.arg === 'petted' || msg.arg === 'laptop' || msg.arg === 'stocks' || msg.arg === 'coin') {
+          pet.perform(msg.arg);
+        }
+        break;
     }
   });
 
@@ -223,7 +235,7 @@ async function main() {
   const calm = () =>
     !drag &&
     !carrierMoving() &&
-    (pet.mode === 'idle' || pet.mode === 'walk') &&
+    CALM_MODES.has(pet.mode) &&
     particles.list.length === 0 &&
     !renderer.animating &&
     pet.emote === null &&
@@ -327,6 +339,10 @@ async function main() {
         support: pet.support?.id ?? null,
         carrierSpeed: Math.hypot(pet.carrier.vx, pet.carrier.vy),
         platforms: pet.platforms.length,
+        input: pet.inputZone
+          ? [pet.inputZone.left, pet.inputZone.top, pet.inputZone.right, pet.inputZone.bottom]
+          : null,
+        fleeing: pet.fleeing,
       };
       bus.emit('telemetry', t);
     }
@@ -340,13 +356,18 @@ function setupBrowserPreview() {
   document.body.classList.add('browser');
   const bar = document.createElement('div');
   bar.className = 'preview-bar';
-  bar.innerHTML = '浏览器预览模式 · 拖住 Clawd 甩出去 · ';
+  bar.innerHTML = '浏览器预览模式 · 拖住 Clawd 甩出去 · 在它头上来回晃鼠标摸摸它 · ';
   const btn = document.createElement('button');
   btn.textContent = '打开调试面板 (D)';
   btn.onclick = () => void openDebugPanel();
   bar.append(btn);
-  document.body.append(bar);
+  // 测试"避让输入框"：点进去打字，Clawd 会让开
+  const input = document.createElement('textarea');
+  input.className = 'preview-input';
+  input.placeholder = '点这里打字试试：Clawd 会给输入框让路';
+  document.body.append(bar, input);
   window.addEventListener('keydown', (e) => {
+    if (e.target instanceof HTMLTextAreaElement) return;
     if (e.key === 'd' || e.key === 'D') void openDebugPanel();
   });
 }

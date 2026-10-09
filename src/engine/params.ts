@@ -90,6 +90,17 @@ export const DEFAULT_TUNING = {
   climbChance: 0.5,
   ceilingChance: 0.4,
 
+  // 小动作
+  activityChance: 0.35,
+  laptopMin: 6,
+  laptopMax: 14,
+  rubFlips: 3,
+
+  // 避让输入框
+  avoidInput: 1,
+  inputMargin: 24,
+  fleeSpeedMul: 2.4,
+
   // 外观
   petScale: 6,
   artRes: 3,
@@ -216,6 +227,15 @@ export const PARAM_DEFS: ParamDef[] = [
   r('行为', 'walkMax', '走路最长', 0, 30, 0.5),
   r('行为', 'climbChance', '走到墙角爬墙概率', 0, 1, 0.05),
   r('行为', 'ceilingChance', '爬到顶上天花板概率', 0, 1, 0.05),
+
+  r('小动作', 'activityChance', '发呆后做小动作概率', 0, 1, 0.05, '敲电脑、炒股、吃金币'),
+  r('小动作', 'laptopMin', '玩电脑最短(s)', 1, 60, 0.5),
+  r('小动作', 'laptopMax', '玩电脑最长(s)', 1, 120, 0.5),
+  r('小动作', 'rubFlips', '摸摸触发来回次数', 1, 8, 1, '1.5 秒内光标在头顶来回折返这么多次就算在摸它'),
+
+  b('避让输入框', 'avoidInput', '避开正在输入的输入框'),
+  r('避让输入框', 'inputMargin', '避让余量(px)', 0, 200, 2),
+  r('避让输入框', 'fleeSpeedMul', '让路时走路速度倍率', 1, 6, 0.1),
 
   r('外观', 'petScale', '大小(px/格)', 2, 16, 0.5),
   r('外观', 'artRes', '像素细分', 1, 4, 1, '旋转时的像素精度，1 最粗犷'),

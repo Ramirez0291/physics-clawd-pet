@@ -21,6 +21,10 @@ const MODE_NAMES: Record<string, string> = {
   hero: '英雄落地',
   splat: '脸着地',
   cling: '贴墙',
+  petted: '被摸摸',
+  laptop: '敲代码',
+  stocks: '炒股',
+  coin: '吃金币',
 };
 const SIDE_NAMES: Record<string, string> = { floor: '地面', ceiling: '天花板', left: '左墙', right: '右墙' };
 const TIER_NAMES: Record<string, string> = {
@@ -169,7 +173,7 @@ async function main() {
 
   bus.on('telemetry', (t: Telemetry) => {
     if (!connected) bus.emit('debug-hello');
-    const grounded = ['idle', 'walk', 'land', 'hero', 'splat', 'cling', 'roll'].includes(t.mode);
+    const grounded = !['air', 'held'].includes(t.mode);
     const surface = t.support !== null ? '窗口顶上' : (SIDE_NAMES[t.side] ?? t.side);
     const where = grounded ? ` @ ${surface}` : '';
     const impact = t.lastImpact
@@ -180,7 +184,9 @@ async function main() {
       `速度  ${Math.round(t.speed).toString().padStart(5)} px/s   (${Math.round(t.vx)}, ${Math.round(t.vy)})   自转 ${t.angVel.toFixed(1)} rad/s\n` +
       `上次冲击  ${impact}   眩晕 ${t.dizzy.toFixed(1)}s   ${Math.round(t.fps)} fps\n` +
       `光标  ${t.cursor ? `${Math.round(t.cursor.x)}, ${Math.round(t.cursor.y)}` : '—'}   ${t.hover ? '在宠物上（可抓取）' : '点击穿透'}\n` +
-      `窗口  ${t.platforms} 段可站顶边   脚下窗口速度 ${t.support !== null ? `${Math.round(t.carrierSpeed)} px/s` : '—'}`;
+      `窗口  ${t.platforms} 段可站顶边   脚下窗口速度 ${t.support !== null ? `${Math.round(t.carrierSpeed)} px/s` : '—'}
+` +
+      `输入框  ${t.input ? t.input.map(Math.round).join(', ') : '—'}${t.fleeing ? '   正在让路' : ''}`;
     $<HTMLButtonElement>('replay').disabled = !t.hasLaunch;
     if (t.paused !== paused) {
       paused = t.paused;
@@ -198,6 +204,9 @@ async function main() {
   $('replay').onclick = () => cmd('replay');
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-preset]')) {
     b.onclick = () => cmd('preset', b.dataset.preset);
+  }
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-act]')) {
+    b.onclick = () => cmd('act', b.dataset.act);
   }
 
   const note = (msg: string) => ($('note').textContent = msg);

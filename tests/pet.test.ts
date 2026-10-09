@@ -193,3 +193,132 @@ describe('抓取与投掷', () => {
     expect(wrapAngle(pet.rot - launched.rot)).toBe(0);
   });
 });
+
+describe('摸摸', () => {
+  /** 光标在头顶左右来回晃（15Hz 采样，和原生侧推送频率一样） */
+  function rubHead(pet: Pet, seconds: number) {
+    const head = () => ({ x: pet.pos.x, y: pet.pos.y - pet.halfH - 6 });
+    let t = 0;
+    let since = 1;
+    let cur = head();
+    for (let i = 0; i < seconds / STEP; i++) {
+      t += STEP;
+      since += STEP;
+      if (since >= 1 / 15) {
+        since = 0;
+        const h = head();
+        cur = { x: h.x + Math.sin(t * Math.PI * 2 * 2.5) * 30, y: h.y };
+      }
+      pet.step(STEP, cur);
+    }
+  }
+
+  it('在头顶来回蹭会触发摸摸，冒爱心；手拿开就结束', () => {
+    const pet = makePet({ activityChance: 0 });
+    pet.placeOnFloor(800);
+    rubHead(pet, 1.5);
+    expect(pet.mode).toBe('petted');
+    rubHead(pet, 1);
+    expect(pet.mode).toBe('petted');
+    expect(pet.consumeEvents().some((e) => e.type === 'heart')).toBe(true);
+    run(pet, 1.5);
+    expect(pet.mode).toBe('idle');
+  });
+
+  it('光标只是从头顶划过去不算摸', () => {
+    const pet = makePet({ activityChance: 0 });
+    pet.placeOnFloor(800);
+    for (let i = 0; i < 60; i++) {
+      pet.step(STEP, { x: pet.pos.x - 60 + i * 2, y: pet.pos.y - pet.halfH - 6 });
+    }
+    expect(pet.mode).not.toBe('petted');
+  });
+});
+
+describe('小动作', () => {
+  it('吃金币：咬三口，每口掉金屑，吃完回到发呆', () => {
+    const pet = makePet({ activityChance: 0 });
+    pet.placeOnFloor(800);
+    expect(pet.perform('coin')).toBe(true);
+    let chomps = 0;
+    for (let i = 0; i < 3.5 / STEP && pet.mode === 'coin'; i++) {
+      pet.step(STEP, null);
+      chomps += pet.consumeEvents().filter((e) => e.type === 'chomp').length;
+    }
+    expect(chomps).toBe(3);
+    expect(pet.bites).toBe(3);
+    expect(pet.mode).toBe('idle');
+  });
+
+  it('炒股时行情一直在动，电脑只能在地上玩', () => {
+    const pet = makePet({ laptopMin: 4, laptopMax: 4 });
+    pet.placeOnFloor(800);
+    expect(pet.perform('stocks')).toBe(true);
+    const before = [...pet.stock];
+    run(pet, 2);
+    expect(pet.mode).toBe('stocks');
+    expect(pet.stock).not.toEqual(before);
+    expect(pet.stock.every((v) => v >= 0 && v <= 1)).toBe(true);
+
+    const wall = makePet();
+    launch(wall, 800, 400, -4000, 0);
+    run(wall, 2, (p) => p.mode === 'walk');
+    expect(wall.side).toBe('left');
+    expect(wall.perform('laptop')).toBe(false);
+    expect(wall.perform('coin')).toBe(true);
+  });
+
+  it('发呆结束后会随机做小动作', () => {
+    const pet = makePet({ activityChance: 1, platformJumpChance: 0, idleMin: 0.1, idleMax: 0.1 });
+    pet.placeOnFloor(800);
+    run(pet, 2, (p) => p.mode !== 'idle');
+    expect(['laptop', 'stocks', 'coin']).toContain(pet.mode);
+  });
+});
+
+describe('避让输入框', () => {
+  const zoneAt = (x: number, w = 300) => ({ left: x - w / 2, top: H - 60, right: x + w / 2, bottom: H - 10 });
+
+  it('站在输入框上会走开，走到空地停下', () => {
+    const pet = makePet({ activityChance: 0 });
+    pet.placeOnFloor(800);
+    pet.setInputZone(zoneAt(820));
+    run(pet, 0.1);
+    expect(pet.mode).toBe('walk');
+    expect(pet.fleeing).toBe(true);
+    expect(pet.dir).toBe(-1); // 输入框中心在右边一点，往左走更近
+    run(pet, 6, (p) => !p.fleeing);
+    expect(pet.blocksInput(pet.pos.x, pet.pos.y)).toBe(false);
+  });
+
+  it('正在玩电脑时输入框出现，会收起电脑让开', () => {
+    const pet = makePet();
+    pet.placeOnFloor(800);
+    pet.perform('laptop');
+    run(pet, 1);
+    pet.setInputZone(zoneAt(800));
+    run(pet, 0.1);
+    expect(pet.mode).toBe('walk');
+    expect(pet.fleeing).toBe(true);
+  });
+
+  it('平时散步把输入框当墙，不会走进去', () => {
+    const pet = makePet({ activityChance: 0, platformJumpChance: 0, idleMin: 0.05, idleMax: 0.05 });
+    pet.placeOnFloor(400);
+    pet.setInputZone(zoneAt(800));
+    for (let i = 0; i < 30 / STEP; i++) {
+      pet.step(STEP, null);
+      pet.consumeEvents();
+      if (pet.side === 'floor' && pet.grounded) expect(pet.blocksInput(pet.pos.x, pet.pos.y)).toBe(false);
+    }
+  });
+
+  it('整条地面都被挡住时会爬墙躲开', () => {
+    const pet = makePet({ activityChance: 0 });
+    pet.placeOnFloor(300);
+    pet.setInputZone({ left: 0, top: H - 120, right: W, bottom: H });
+    run(pet, 20, (p) => !p.fleeing && p.side !== 'floor');
+    expect(pet.side).not.toBe('floor');
+    expect(pet.blocksInput(pet.pos.x, pet.pos.y)).toBe(false);
+  });
+});

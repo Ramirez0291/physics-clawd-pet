@@ -50,6 +50,26 @@
         color: #fff;
         cursor: pointer;
       }
+      .preview-input {
+        position: fixed;
+        left: 24px;
+        bottom: 12px;
+        width: min(360px, 45vw);
+        height: 44px;
+        padding: 8px 12px;
+        box-sizing: border-box;
+        border: 1px solid #d77757;
+        border-radius: 10px;
+        background: rgba(250, 249, 245, 0.92);
+        color: #141413;
+        font: 14px/1.4 system-ui, sans-serif;
+        resize: none;
+        z-index: 1;
+        user-select: text;
+      }
+      body:not(.browser) .preview-input {
+        display: none;
+      }
     </style>
   </head>
   <body>

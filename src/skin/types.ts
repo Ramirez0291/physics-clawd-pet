@@ -39,7 +39,8 @@ export interface Skin extends Omit<SkinDef, 'parts'> {
   torsoAnchor: { x: number; y: number };
 }
 
-function parseHex(hex: string): number {
+/** '#rrggbb' / '#rrggbbaa' → ImageData 用的 uint32（小端序 RGBA） */
+export function parseHex(hex: string): number {
   const m = /^#?([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(hex.trim());
   if (!m) throw new Error(`颜色格式不对: ${hex}`);
   const v = parseInt(m[1], 16);

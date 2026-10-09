@@ -23,6 +23,8 @@ pub struct DeskState {
     pub manual_hidden: bool,
     /// 前端刚加载完，需要把当前状态全部重发一遍
     pub resync: bool,
+    /// 同上，给输入框检测线程用
+    pub input_resync: bool,
 }
 
 pub type Shared = Arc<Mutex<DeskState>>;

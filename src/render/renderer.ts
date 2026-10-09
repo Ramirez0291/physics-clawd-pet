@@ -40,6 +40,7 @@ interface Ghost {
 const GHOST_LIFE = 0.12;
 const STAR = '#f5c542';
 const INK = '#141413';
+const HEART = ['.#.#.', '#####', '.###.', '..#..'];
 
 /**
  * 像素风渲染：宠物先在低分辨率网格里按"旋转+形变"逐像素采样，再用最近邻放大。
@@ -163,21 +164,36 @@ export class Renderer {
 
     const [gw, gh] = skin.grid;
     const ta = skin.torsoAnchor;
-    const n = skin.parts.length;
+    // 部件在前，道具在后（画在最上面）
+    const np = skin.parts.length;
+    const n = np + pose.props.length;
     const rects = new Float64Array(n * 4);
+    const colors = new Uint32Array(n);
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
     for (let i = 0; i < n; i++) {
-      const part = skin.parts[i];
-      const pp = pose.parts[i];
-      const [x, y, w, h] = part.rect;
+      let x: number, y: number, w: number, h: number;
+      let pp = { dx: 0, dy: 0, sx: 1, sy: 1 };
+      let followTorso: boolean;
+      if (i < np) {
+        const part = skin.parts[i];
+        [x, y, w, h] = part.rect;
+        pp = pose.parts[i];
+        followTorso = part.role !== 'leg';
+        colors[i] = part.rgba;
+      } else {
+        const prop = pose.props[i - np];
+        ({ x, y, w, h } = prop);
+        followTorso = !!prop.torso;
+        colors[i] = prop.rgba;
+      }
       let cx = x + w / 2 + pp.dx;
       let cy = y + h / 2 + pp.dy;
       let hw = (w / 2) * pp.sx;
       let hh = (h / 2) * pp.sy;
-      if (part.role !== 'leg') {
+      if (followTorso) {
         const t = pose.torso;
         cx = ta.x + (cx - ta.x) * t.sx + t.dx;
         cy = ta.y + (cy - ta.y) * t.sy + t.dy;
@@ -215,7 +231,6 @@ export class Renderer {
     const img = new ImageData(W, H);
     const buf = new Uint32Array(img.data.buffer);
     const inv = invert(m);
-    const colors = skin.parts.map((p) => p.rgba);
     let hash = 2166136261;
     let ox0 = Infinity;
     let oy0 = Infinity;
@@ -303,6 +318,20 @@ export class Renderer {
         }
         continue;
       }
+      if (p.kind === 'heart') {
+        // 像素小爱心，快消失时缩小一号
+        const u = Math.max(1, Math.round(up * (k > 0.35 ? 1.5 : 1)));
+        const x0 = Math.round(p.x * d - 2.5 * u);
+        const y0 = Math.round(p.y * d - 2 * u);
+        this.ctx.fillStyle = p.color;
+        for (let j = 0; j < HEART.length; j++) {
+          for (let i = 0; i < HEART[j].length; i++) {
+            if (HEART[j][i] === '#') this.ctx.fillRect(x0 + i * u, y0 + j * u, u, u);
+          }
+        }
+        this.markDirty(x0, y0, 5 * u, 4 * u);
+        continue;
+      }
       // 像素风：不做透明渐隐，用"缩小一格一格"表现消散
       const cells = Math.max(1, Math.round(p.size * (0.4 + 0.6 * k)));
       this.px(p.x * d, p.y * d, cells * up, p.color);
@@ -357,6 +386,13 @@ export class Renderer {
     const cy = pet.pos.y * d;
     ctx.lineWidth = Math.max(1, d);
     if (T.showHitbox) {
+      // 正在输入的输入框：紫色
+      const z = pet.inputZone;
+      if (z) {
+        ctx.strokeStyle = '#a855f7';
+        ctx.strokeRect(z.left * d, z.top * d, (z.right - z.left) * d, (z.bottom - z.top) * d);
+        this.markDirty(z.left * d - 2, z.top * d - 2, (z.right - z.left) * d + 4, (z.bottom - z.top) * d + 4);
+      }
       // 可站的窗口顶边：绿色；脚下那段：橙色
       for (const p of pet.platforms) {
         const on = pet.support !== null && pet.support.id === p.id && pet.pos.x >= p.x0 && pet.pos.x <= p.x1;
