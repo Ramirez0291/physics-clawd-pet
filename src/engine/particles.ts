@@ -1,7 +1,7 @@
 import { rand } from './math';
 import type { ImpactTier, PetEvent } from './pet';
 
-export type ParticleKind = 'dust' | 'debris' | 'shock' | 'heart';
+export type ParticleKind = 'dust' | 'debris' | 'shock' | 'heart' | 'fluff';
 
 export interface Particle {
   kind: ParticleKind;
@@ -41,6 +41,8 @@ const DUST_COUNT: Record<ImpactTier, number> = {
 export class ParticleSystem {
   list: Particle[] = [];
   private max = 400;
+  /** 抖毛时甩出来的毛团颜色（跟着皮肤换） */
+  fluffColor = '#ffffff';
 
   constructor(private rng: () => number = Math.random) {}
 
@@ -54,6 +56,33 @@ export class ParticleSystem {
     else if (ev.type === 'fling') this.impact('bounce', ev.x, ev.y, 0, -1, Math.hypot(ev.vx, ev.vy));
     else if (ev.type === 'heart') this.heart(ev.x, ev.y, ev.nx, ev.ny);
     else if (ev.type === 'chomp') this.chomp(ev.x, ev.y, ev.nx, ev.ny);
+    else if (ev.type === 'fluff') this.fluff(ev.x, ev.y, ev.nx, ev.ny);
+  }
+
+  /** 抖毛：几撮毛往两边甩出去，轻飘飘地落下 */
+  private fluff(x: number, y: number, nx: number, ny: number) {
+    const r = this.rng;
+    const tx = -ny;
+    const ty = nx;
+    for (let i = 0; i < 4; i++) {
+      const side = i % 2 === 0 ? 1 : -1;
+      const along = side * rand(140, 320, r);
+      const out = rand(40, 200, r);
+      const life = rand(0.7, 1.2, r);
+      this.push({
+        kind: 'fluff',
+        x: x + tx * side * rand(10, 30, r),
+        y: y + ty * side * rand(10, 30, r),
+        vx: tx * along + nx * out,
+        vy: ty * along + ny * out,
+        life,
+        maxLife: life,
+        size: rand(1.5, 2.5, r),
+        color: this.fluffColor,
+        drag: 3.5,
+        gravity: -120 * ny, // 毛很轻：慢慢往"下"（远离表面法线的方向）飘
+      });
+    }
   }
 
   /** 摸摸：头顶冒出一颗小爱心，慢慢飘走 */

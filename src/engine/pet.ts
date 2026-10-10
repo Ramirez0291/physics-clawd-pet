@@ -38,10 +38,22 @@ export type Mode =
   | 'petted' // 被摸头
   | 'laptop' // 掏出笔记本敲代码
   | 'stocks' // 掏出笔记本炒股
-  | 'coin'; // 掏出 token 金币吃掉
+  | 'coin' // 掏出 token 金币吃掉
+  | 'shake'; // 抖毛（毛茸茸的皮肤专属）
+
+/** 发呆时会随机做的小动作。皮肤在 skin.json 的 actions 里挑自己会做哪些。 */
+export type Activity = 'laptop' | 'stocks' | 'coin' | 'shake';
+export const ACTIVITIES: readonly Activity[] = ['laptop', 'stocks', 'coin', 'shake'];
+/** 皮肤没写 actions 时会做的 */
+export const DEFAULT_ACTIVITIES: readonly Activity[] = ['laptop', 'stocks', 'coin'];
+/** 随机挑小动作时的权重 */
+const ACTIVITY_WEIGHT: Record<Activity, number> = { laptop: 0.4, stocks: 0.3, coin: 0.3, shake: 0.3 };
 
 /** 玩电脑类的小动作（电脑摆在 dir 那一侧的地上） */
 export const LAPTOP_MODES: ReadonlySet<Mode> = new Set(['laptop', 'stocks']);
+/** 抖毛：时长，以及抖掉毛团的时刻（秒） */
+export const SHAKE_TIME = 1.6;
+const SHAKE_PUFFS = [0.35, 0.6, 0.85, 1.1];
 /** 吃TOKEN的时间轴（秒）：掏出 → 举起欣赏 → 三口吃掉 → 回味 */
 export const COIN_TIME = 3.3;
 export const COIN_BITES = [1.35, 1.8, 2.25];
@@ -68,7 +80,8 @@ export type PetEvent =
   | { type: 'fling'; x: number; y: number; vx: number; vy: number }
   | { type: 'dropped' }
   | { type: 'heart'; x: number; y: number; nx: number; ny: number }
-  | { type: 'chomp'; x: number; y: number; nx: number; ny: number };
+  | { type: 'chomp'; x: number; y: number; nx: number; ny: number }
+  | { type: 'fluff'; x: number; y: number; nx: number; ny: number };
 
 /** 一次投掷的初始条件，用于"重放上次投掷"做 A/B 对比 */
 export interface LaunchState {
@@ -108,11 +121,12 @@ const GROUNDED: ReadonlySet<Mode> = new Set([
   'laptop',
   'stocks',
   'coin',
+  'shake',
 ]);
 /** 这些状态下光标在头顶来回蹭就算摸摸 */
-const RUBBABLE: ReadonlySet<Mode> = new Set(['idle', 'walk', 'land', 'petted', 'laptop', 'stocks', 'coin']);
+const RUBBABLE: ReadonlySet<Mode> = new Set(['idle', 'walk', 'land', 'petted', 'laptop', 'stocks', 'coin', 'shake']);
 /** 这些状态下挡住输入框会主动让开 */
-const AVOIDING: ReadonlySet<Mode> = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin']);
+const AVOIDING: ReadonlySet<Mode> = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin', 'shake']);
 
 interface Hold {
   /** 抓取点相对身体中心的偏移（宠物本地坐标、未旋转，单位 px） */
@@ -198,6 +212,10 @@ export class Pet {
   private rollDust = 0;
   /** 设备像素比：决定实际画出来的格子大小 */
   private pixelRatio = 1;
+  /** 像素画风的皮肤：格子大小要对齐整数设备像素 */
+  private pixelArt = true;
+  /** 当前皮肤会做的小动作 */
+  actions: ReadonlySet<Activity> = new Set(DEFAULT_ACTIVITIES);
 
   constructor(
     public tuning: Tuning,
@@ -210,7 +228,7 @@ export class Pet {
 
   /** 一个皮肤格子的边长（CSS 像素），与渲染器画出来的一致 */
   get cell() {
-    return cellSize(this.tuning, this.pixelRatio);
+    return cellSize(this.tuning, this.pixelRatio, this.pixelArt);
   }
   get halfW() {
     return (this.grid[0] * this.cell) / 2;
@@ -242,6 +260,18 @@ export class Pet {
     const before = this.cell;
     this.tuning = t;
     if (this.cell !== before) this.resnap();
+  }
+
+  /** 换皮肤：碰撞盒跟着网格大小变 */
+  setGrid(grid: [number, number], opts: { pixelArt?: boolean; actions?: readonly Activity[] } = {}) {
+    this.grid = grid;
+    this.pixelArt = opts.pixelArt ?? true;
+    this.actions = new Set(opts.actions ?? DEFAULT_ACTIVITIES);
+    // 正在做新皮肤不会的小动作：收手
+    if ((ACTIVITIES as readonly Mode[]).includes(this.mode) && !this.actions.has(this.mode as Activity)) {
+      this.setMode('idle', rand(this.tuning.idleMin, this.tuning.idleMax, this.rng));
+    }
+    this.resnap();
   }
 
   setPixelRatio(dpr: number) {
@@ -323,7 +353,7 @@ export class Pet {
   }
 
   /** 调试用：马上做某个小动作。站在面上才行，返回是否成功。 */
-  perform(m: 'petted' | 'laptop' | 'stocks' | 'coin'): boolean {
+  perform(m: 'petted' | Activity): boolean {
     if (!RUBBABLE.has(this.mode)) return false;
     if (m === 'petted') {
       this.startPetted();
@@ -546,6 +576,7 @@ export class Pet {
       case 'laptop':
       case 'stocks':
       case 'coin':
+      case 'shake':
         this.stepActivity(dt);
         break;
       default:
@@ -1122,19 +1153,22 @@ export class Pet {
     }
   }
 
-  // ---------- 小动作：电脑、炒股、吃TOKEN ----------
+  // ---------- 小动作：电脑、炒股、吃TOKEN、抖毛 ----------
 
-  /** 开始一个小动作。不指定就随机挑；电脑只能在地上（或窗口顶上）玩。 */
-  private startActivity(want?: 'laptop' | 'stocks' | 'coin'): boolean {
+  /** 开始一个小动作。不指定就按权重随机挑；只挑当前皮肤会做的，电脑只能在地上（或窗口顶上）玩。 */
+  private startActivity(want?: Activity): boolean {
     const T = this.tuning;
     const onFloor = this.side === 'floor';
+    const can = (a: Activity) => this.actions.has(a) && (onFloor || !LAPTOP_MODES.has(a));
     let m = want;
+    if (m && !can(m)) return false;
     if (!m) {
-      const r = this.rng();
-      m = !onFloor || r >= 0.7 ? 'coin' : r < 0.4 ? 'laptop' : 'stocks';
+      const options = ACTIVITIES.filter(can);
+      let r = this.rng() * options.reduce((s, a) => s + ACTIVITY_WEIGHT[a], 0);
+      m = options.find((a) => (r -= ACTIVITY_WEIGHT[a]) < 0) ?? options[options.length - 1];
+      if (!m) return false;
     }
-    if (m !== 'coin') {
-      if (!onFloor) return false;
+    if (LAPTOP_MODES.has(m)) {
       this.dir = this.laptopSide();
       // 开盘前先随机走一段，屏幕上一开始就有行情
       let v = 0.5;
@@ -1147,7 +1181,13 @@ export class Pet {
       this.stockTick = 0.6;
     }
     this.bites = 0;
-    this.setMode(m, m === 'coin' ? COIN_TIME : rand(T.laptopMin, Math.max(T.laptopMin, T.laptopMax), this.rng));
+    const duration =
+      m === 'coin'
+        ? COIN_TIME
+        : m === 'shake'
+          ? SHAKE_TIME
+          : rand(T.laptopMin, Math.max(T.laptopMin, T.laptopMax), this.rng);
+    this.setMode(m, duration);
     return true;
   }
 
@@ -1176,6 +1216,14 @@ export class Pet {
         this.squash = Math.max(this.squash, 0.14);
         this.squashVel = 0;
         this.events.push({ type: 'chomp', x: this.pos.x, y: this.pos.y, nx: n.x, ny: n.y });
+      }
+    }
+    if (this.mode === 'shake') {
+      // 抖几下，每下甩掉几撮毛（bites 在这里当"抖了几下"用）
+      while (this.bites < SHAKE_PUFFS.length && this.modeTime >= SHAKE_PUFFS[this.bites]) {
+        this.bites++;
+        const n = NORMAL[this.side];
+        this.events.push({ type: 'fluff', x: this.pos.x, y: this.pos.y, nx: n.x, ny: n.y });
       }
     }
     if (this.modeTime < this.modeDuration) return;

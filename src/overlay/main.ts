@@ -1,8 +1,7 @@
-import clawdDef from '../../skins/clawd/skin.json';
 import { type Vec2, clamp } from '../engine/math';
 import { DEFAULT_TUNING, PARAM_DEFS, cellSize, mergeTuning, type Tuning } from '../engine/params';
 import { ParticleSystem } from '../engine/particles';
-import { type Bounds, type LaunchState, Pet } from '../engine/pet';
+import { ACTIVITIES, type Activity, type Bounds, type LaunchState, Pet } from '../engine/pet';
 import { VelocitySampler } from '../engine/throw';
 import {
   type CarrierSample,
@@ -14,7 +13,7 @@ import {
   saveTuning,
 } from '../platform/host';
 import { Renderer } from '../render/renderer';
-import { type SkinDef, loadSkin } from '../skin/types';
+import { SKINS, findSkin } from '../skin/registry';
 
 /** 这些状态下动作幅度小，可以降帧省电 */
 const CALM_MODES = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin']);
@@ -68,15 +67,23 @@ async function main() {
   if (!isTauri) setupBrowserPreview();
 
   const canvas = document.getElementById('stage') as HTMLCanvasElement;
-  const skin = loadSkin(clawdDef as unknown as SkinDef);
   const bus = await createBus();
   const host = await createOverlayHost();
-  let tuning: Tuning = mergeTuning(DEFAULT_TUNING, await loadTuning());
+  const saved = await loadTuning();
+  let tuning: Tuning = mergeTuning(DEFAULT_TUNING, saved);
+  let skin = findSkin(saved?.skin);
 
   const bounds = (): Bounds => ({ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight });
   const pet = new Pet(tuning, skin.grid, bounds());
   const particles = new ParticleSystem();
   const renderer = new Renderer(canvas, skin);
+  /** 皮肤决定碰撞盒、画风（像素会量化大小）、会做的小动作和毛团颜色 */
+  const applySkin = () => {
+    renderer.setSkin(skin);
+    pet.setGrid(skin.grid, { pixelArt: skin.pixelArt, actions: skin.actions });
+    particles.fluffColor = skin.palette.body ?? skin.parts[0].hex;
+  };
+  applySkin();
   const sampler = new VelocitySampler();
 
   const resize = () => {
@@ -181,7 +188,16 @@ async function main() {
   let paused = false;
   let stepFrames = 0;
   let debugPing = -Infinity;
-  const publishState = () => bus.emit('tuning-state', { tuning, defaults: DEFAULT_TUNING, paused });
+  const skinList = SKINS.map(({ id, name }) => ({ id, name }));
+  const publishState = () =>
+    bus.emit('tuning-state', {
+      tuning,
+      defaults: DEFAULT_TUNING,
+      paused,
+      skins: skinList,
+      skin: skin.id,
+      actions: skin.actions,
+    });
 
   bus.on('debug-hello', () => {
     debugPing = performance.now();
@@ -218,31 +234,56 @@ async function main() {
         break;
       }
       case 'act':
-        if (msg.arg === 'petted' || msg.arg === 'laptop' || msg.arg === 'stocks' || msg.arg === 'coin') {
-          pet.perform(msg.arg);
+        // 当前皮肤不会的小动作，perform 会拒绝
+        if (msg.arg === 'petted' || ACTIVITIES.includes(msg.arg as Activity)) {
+          pet.perform(msg.arg as 'petted' | Activity);
         }
         break;
     }
   });
 
-  // ---------- 大小：托盘菜单 / 在宠物上滚滚轮（调教面板里开启） ----------
+  // ---------- 托盘菜单直接改的设置：只写回这几项，调教面板里没保存的改动不跟着落盘 ----------
 
   let saveTimer = 0;
+  let unsaved: Record<string, unknown> = {};
+  const persist = (patch: Record<string, unknown>) => {
+    Object.assign(unsaved, patch);
+    clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(async () => {
+      const changes = unsaved;
+      unsaved = {};
+      try {
+        await saveTuning({ ...(await loadTuning()), ...changes });
+      } catch (e) {
+        console.warn('保存设置失败', e);
+      }
+    }, 500);
+  };
+
+  // ---------- 形象 ----------
+
+  host.setSkins(skinList, skin.id);
+  bus.on('pet-skin', (msg: { id: string }) => {
+    const next = SKINS.find((s) => s.id === msg.id);
+    if (next && next.id !== skin.id) {
+      skin = next;
+      applySkin();
+      publishState();
+      persist({ skin: skin.id });
+    }
+    // 点的是已选中的那项时，菜单会把勾去掉，所以总是重发一遍
+    host.setSkins(skinList, skin.id);
+  });
+
+  // ---------- 大小：托盘菜单 / 在宠物上滚滚轮（调教面板里开启） ----------
+
   const setScale = (v: number) => {
     const s = clamp(v, SCALE_DEF.min, SCALE_DEF.max);
     if (s === tuning.petScale) return;
     tuning = mergeTuning(tuning, { petScale: s });
     pet.setTuning(tuning);
     publishState();
-    // 只把大小写回已保存的参数，调教面板里没保存的改动不跟着落盘
-    clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(async () => {
-      try {
-        await saveTuning({ ...(await loadTuning()), petScale: tuning.petScale });
-      } catch (e) {
-        console.warn('保存大小失败', e);
-      }
-    }, 500);
+    persist({ petScale: s });
   };
 
   /**
@@ -250,11 +291,16 @@ async function main() {
    * 存成它实际画出来的值，这样调教面板滑块显示的就是真实大小。
    */
   const stepScale = (dir: number) => {
+    if (!skin.pixelArt) {
+      // 平滑画风什么大小都画得出来：每档放大/缩小约 25%
+      setScale(Math.round(tuning.petScale * (dir > 0 ? 1.25 : 0.8) * 2) / 2);
+      return;
+    }
     const dpr = window.devicePixelRatio || 1;
-    const cur = cellSize(tuning, dpr);
+    const cur = cellSize(tuning, dpr, skin.pixelArt);
     const d = Math.sign(dir) * SCALE_DEF.step;
     for (let s = tuning.petScale + d; s >= SCALE_DEF.min && s <= SCALE_DEF.max; s += d) {
-      const c = cellSize({ ...tuning, petScale: s }, dpr);
+      const c = cellSize({ ...tuning, petScale: s }, dpr, skin.pixelArt);
       if (c !== cur) {
         setScale(c >= SCALE_DEF.min && c <= SCALE_DEF.max ? c : s);
         return;

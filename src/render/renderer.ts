@@ -4,6 +4,7 @@ import type { ParticleSystem } from '../engine/particles';
 import type { Pet } from '../engine/pet';
 import { bodyTransform, computePose } from '../engine/pose';
 import type { Skin } from '../skin/types';
+import { FurCache, drawItems, layoutItems } from './smooth';
 
 /** 设备像素矩形 */
 interface Rect {
@@ -25,6 +26,8 @@ interface SpriteFrame {
   m: Affine;
   opaque: { x0: number; y0: number; x1: number; y1: number } | null;
   hash: number;
+  /** 特效（星星、爱心、感叹号、粒子）的像素块大小（设备像素） */
+  fx: number;
 }
 
 interface Ghost {
@@ -45,6 +48,7 @@ const HEART = ['.#.#.', '#####', '.###.', '..#..'];
 /**
  * 像素风渲染：宠物先在低分辨率网格里按"旋转+形变"逐像素采样，再用最近邻放大。
  * 这样转起来像素块也始终整齐，不会糊边。
+ * 平滑画风的皮肤（见 smooth.ts）按实际分辨率画进同一块精灵画布，残影、点击判定都照常用。
  */
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -57,6 +61,7 @@ export class Renderer {
   private ghostPool: HTMLCanvasElement[] = [];
   private lastSig = '';
   private fullClear = true;
+  private fur = new FurCache();
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -76,6 +81,7 @@ export class Renderer {
   setSkin(skin: Skin) {
     this.skin = skin;
     this.lastSig = '';
+    this.fur.clear();
   }
 
   resize(cssW: number, cssH: number, dpr: number) {
@@ -138,7 +144,7 @@ export class Renderer {
     ctx.globalAlpha = 1;
     this.blit(this.sprite, frame.ox, frame.oy, frame.w, frame.h, frame.up);
 
-    if (T.particles) this.drawParticles(particles, frame.up);
+    if (T.particles) this.drawParticles(particles, frame.fx);
     if (showStars) this.drawStars(pet, frame);
     if (pet.emote) this.drawEmote(pet, frame);
     if (T.showHitbox || T.showVelocity) this.drawDebug(pet, T);
@@ -147,6 +153,7 @@ export class Renderer {
   // ---------- 精灵栅格化 ----------
 
   private rasterize(pet: Pet, T: Tuning): SpriteFrame {
+    if (!this.skin.pixelArt) return this.drawSmooth(pet, T);
     const skin = this.skin;
     const dpr = this.dpr;
     const up = spritePixel(T, dpr);
@@ -266,7 +273,58 @@ export class Renderer {
       ox1 >= ox0
         ? { x0: ox + ox0 * up, y0: oy + oy0 * up, x1: ox + (ox1 + 1) * up, y1: oy + (oy1 + 1) * up }
         : null;
-    return { ox, oy, up, w: W, h: H, m, opaque, hash: hash >>> 0 };
+    return { ox, oy, up, w: W, h: H, m, opaque, hash: hash >>> 0, fx: up };
+  }
+
+  /** 平滑画风：画进精灵画布，1 个精灵像素 = 1 个设备像素 */
+  private drawSmooth(pet: Pet, T: Tuning): SpriteFrame {
+    const skin = this.skin;
+    const dpr = this.dpr;
+    const unit = cellSize(T, dpr, false);
+    const m = mul(scale(dpr), bodyTransform(pet, unit));
+    const items = layoutItems(skin, computePose(pet, skin));
+    const [gw, gh] = skin.grid;
+
+    // 包围盒（设备像素）：每个部件的四个角（考虑部件自身的旋转）变换到屏幕上
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let hash = 2166136261;
+    for (const it of items) {
+      const c = Math.cos(it.rot);
+      const s = Math.sin(it.rot);
+      for (const [px, py] of [
+        [-it.hw, -it.hh],
+        [it.hw, -it.hh],
+        [-it.hw, it.hh],
+        [it.hw, it.hh],
+      ]) {
+        const p = apply(m, it.cx - gw / 2 + c * px - s * py, it.cy - gh / 2 + s * px + c * py);
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+      for (const v of [it.cx, it.cy, it.hw, it.hh, it.rgba]) hash = Math.imul(hash ^ Math.round(v * 64), 16777619);
+    }
+    for (const v of [m.a, m.b, m.c, m.d, m.e, m.f]) hash = Math.imul(hash ^ Math.round(v * 64), 16777619);
+
+    const ox = Math.floor(minX) - 1;
+    const oy = Math.floor(minY) - 1;
+    const W = Math.min(2048, Math.max(1, Math.ceil(maxX) + 1 - ox));
+    const H = Math.min(2048, Math.max(1, Math.ceil(maxY) + 1 - oy));
+    if (this.sprite.width < W || this.sprite.height < H) {
+      this.sprite.width = Math.max(this.sprite.width, W);
+      this.sprite.height = Math.max(this.sprite.height, H);
+    }
+    const g = this.sctx;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, W, H);
+    drawItems(g, items, skin, m, ox, oy, unit * dpr, this.fur);
+
+    const opaque = Number.isFinite(minX) ? { x0: minX, y0: minY, x1: maxX, y1: maxY } : null;
+    return { ox, oy, up: 1, w: W, h: H, m, opaque, hash: hash >>> 0, fx: spritePixel(T, dpr) };
   }
 
   private blit(src: HTMLCanvasElement, ox: number, oy: number, w: number, h: number, up: number) {
@@ -331,6 +389,33 @@ export class Renderer {
         this.markDirty(x0, y0, 5 * u, 4 * u);
         continue;
       }
+      if (p.kind === 'fluff') {
+        // 一小撮毛：实心小团 + 一圈往外翘的短毛，边飘边变淡、边转
+        const rad = p.size * up * (0.7 + 0.3 * k);
+        const x = p.x * d;
+        const y = p.y * d;
+        const ctx = this.ctx;
+        ctx.globalAlpha = Math.min(1, k * 1.6);
+        ctx.fillStyle = p.color;
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = Math.max(1, up * 0.3);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(x, y, rad * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        const spin = p.life * 3 + p.maxLife * 10;
+        for (let i = 0; i < 9; i++) {
+          const a = spin + (i / 9) * Math.PI * 2;
+          const len = rad * (i % 2 ? 0.8 : 1);
+          ctx.moveTo(x + Math.cos(a) * rad * 0.3, y + Math.sin(a) * rad * 0.3);
+          ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        this.markDirty(x - rad, y - rad, rad * 2, rad * 2);
+        continue;
+      }
       // 像素风：不做透明渐隐，用"缩小一格一格"表现消散
       const cells = Math.max(1, Math.round(p.size * (0.4 + 0.6 * k)));
       this.px(p.x * d, p.y * d, cells * up, p.color);
@@ -345,7 +430,7 @@ export class Renderer {
       const lx = Math.cos(a) * gw * 0.35;
       const ly = -gh / 2 - 2 + Math.sin(a) * 0.8;
       const p = apply(f.m, lx, ly);
-      const u = f.up;
+      const u = f.fx;
       this.px(p.x, p.y, u, STAR);
       this.px(p.x - u, p.y, u, STAR);
       this.px(p.x + u, p.y, u, STAR);
@@ -358,7 +443,7 @@ export class Renderer {
     const e = pet.emote!;
     const ctx = this.ctx;
     const d = this.dpr;
-    const u = f.up;
+    const u = f.fx;
     const rise = Math.min(1, e.t / 0.08);
     const cx = Math.round((pet.pos.x + pet.visOffset.x) * d);
     const bottom = Math.round(

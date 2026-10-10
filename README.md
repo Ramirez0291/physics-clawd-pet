@@ -31,7 +31,7 @@ Grab it, fling it across your screen, and watch it tumble, superhero-land, or st
 - **Landings depend on how hard it hits:** a soft landing, a bounce, a roll, a superhero landing, or a faceplant.
 - **Sticks to walls and the ceiling** when it hits them fast enough, then crawls along the edge or backflips off.
 - **Satisfying impacts:** hit-stop, squash and stretch, motion trails, dust clouds and impact lines.
-- **Crisp pixel art at any angle.** It is rotated on a low-res grid and scaled up with nearest-neighbor, so the pixels stay sharp mid-spin.
+- **Pixel art or fluff.** Clawd is pixel art: it is rotated on a low-res grid and scaled up with nearest-neighbor, so the pixels stay sharp mid-spin. Dots is drawn smooth at full resolution, with procedurally generated fur.
 
 **It lives on your desktop**
 
@@ -42,6 +42,8 @@ Grab it, fling it across your screen, and watch it tumble, superhero-land, or st
 - **Pet it** by moving your cursor back and forth over its head.
 - **Stays out of your way.** It walks away from the text box you're typing in, and hides while a full-screen app (game, video, slides) is running.
 - **Never steals focus or clicks.** Only the pet itself is clickable. Everything else clicks straight through to the windows below.
+
+**Two characters:** Clawd, and Dots, the blue fluffball in a beret. Switch between them any time from the tray menu. Each has its own habits: Dots doesn't trade stocks, but sometimes gives itself a good shake and sends tufts of fur flying.
 
 ### Download
 
@@ -56,6 +58,7 @@ Requires Windows 10 or 11 with WebView2 (already included in Windows 11).
 | --- | --- |
 | Throw | Drag Clawd and let go while moving the mouse |
 | Pet | Wiggle the cursor back and forth over its head |
+| Switch character | Tray icon → right-click → **Character** |
 | Change size | Tray icon → right-click → **Size** |
 | Lost it? | Tray icon → right-click → **Bring Clawd back** |
 | Hide / show | Tray icon → right-click → **Hide Clawd** |
@@ -92,12 +95,12 @@ npm test              # engine unit tests
 ```
 src/
   engine/     Physics, state machine and procedural animation. Pure logic, unit-tested.
-  render/     Pixel-art rasterizer and effects
+  render/     Pixel-art rasterizer, smooth/fur renderer and effects
   overlay/    Main loop, mouse input, link to the tuning panel
   debug/      Tuning panel
   platform/   Tauri and browser implementations
   skin/       Skin format and loader
-skins/clawd/  The Clawd skin
+skins/        Built-in characters: clawd/, dots/
 src-tauri/    Rust: transparent overlay window, tray, desktop window tracking (Win32)
 tests/        Engine tests
 ```
@@ -106,13 +109,22 @@ tests/        Engine tests
 
 ### Custom skins
 
-A skin is a single JSON file: a grid size, a color palette and a list of rectangles. Each rectangle gets one of four roles: `body`, `eye`, `arm` or `leg`. All movement is generated from these roles, so **a new character needs no animation frames at all.** See [`skins/clawd/skin.json`](skins/clawd/skin.json) for an example.
+A skin is a single JSON file: a grid size, a color palette and a list of rectangles. Each rectangle gets one of four roles: `body`, `eye`, `arm` or `leg`. All movement is generated from these roles, so **a new character needs no animation frames at all.** Put it in its own folder under `skins/` and it shows up in the **Character** menu automatically.
+
+A few optional fields:
+
+- `"render": "smooth"` draws the character at full resolution instead of as pixel art. Parts can then be `"shape": "ellipse"` or `"cloud"`, tilted with `"rot"`, and made furry with `"fur": true`.
+- `"actions"` picks which idle activities it does, from `laptop`, `stocks`, `coin` and `shake`. Leave it out to get the first three.
+
+See [`skins/clawd/skin.json`](skins/clawd/skin.json) (pixel art) and [`skins/dots/skin.json`](skins/dots/skin.json) (smooth and furry) for examples.
 
 ### License
 
 The engine code is released under the [MIT License](LICENSE).
 
 Clawd is the mascot of Anthropic's Claude Code. This skin is **fan art**, not affiliated with or endorsed by Anthropic. The character is **not** covered by the MIT license. See [`skins/clawd/README.md`](skins/clawd/README.md).
+
+The Dots skin is likewise **fan art** of OpenAI's Dots, not affiliated with or endorsed by OpenAI, and **not** covered by the MIT license. See [`skins/dots/README.md`](skins/dots/README.md).
 
 ---
 
@@ -126,7 +138,7 @@ Clawd is the mascot of Anthropic's Claude Code. This skin is **fan art**, not af
 - **落地看冲击力：** 普通落地、弹跳、翻滚、超级英雄落地，或者脸着地。
 - **贴墙：** 高速撞到屏幕边或天花板会贴住，然后沿着边爬，或者蹬墙后空翻跳下来。
 - **打击感拉满：** 顿帧、果冻形变、速度拉伸、残影、烟尘和冲击线。
-- **怎么转都是整齐的像素：** 先在低分辨率网格里旋转，再最近邻放大，翻滚时像素块也不会糊。
+- **像素风，或者毛茸茸：** Clawd 是像素风，先在低分辨率网格里旋转再最近邻放大，翻滚时像素块也不会糊；Dots 按实际分辨率平滑绘制，毛发是程序生成的。
 
 **住在你的桌面上**
 
@@ -137,6 +149,8 @@ Clawd is the mascot of Anthropic's Claude Code. This skin is **fan art**, not af
 - **可以摸摸它：** 在它头上来回晃鼠标。
 - **不碍事：** 你在哪个输入框打字，它就从那里让开；全屏玩游戏、看视频、放幻灯片时自动隐藏。
 - **不抢焦点、不挡点击：** 只有宠物本身能点到，其他地方的点击都会穿透到下面的窗口。
+
+**两个形象：** Clawd，以及戴贝雷帽的蓝色毛球 Dots。随时可以在托盘菜单里切换。两个形象的习惯不一样：Dots 不炒股，但时不时会使劲抖一抖毛，甩出几撮毛团。
 
 ### 下载
 
@@ -151,6 +165,7 @@ Clawd is the mascot of Anthropic's Claude Code. This skin is **fan art**, not af
 | --- | --- |
 | 甩 | 按住 Clawd 拖动，边移动鼠标边松手 |
 | 摸摸 | 在它头上来回晃鼠标 |
+| 换形象 | 托盘图标右键 → **形象** |
 | 调大小 | 托盘图标右键 → **大小** |
 | 找不到它了 | 托盘图标右键 → **把 Clawd 叫回来** |
 | 隐藏 / 显示 | 托盘图标右键 → **隐藏 Clawd** |
@@ -185,10 +200,19 @@ npm test              # 引擎单元测试
 
 ### 自制皮肤
 
-皮肤就是一个 JSON 文件：网格大小、调色板，加上一组矩形部件。每个部件标一个角色：`body`（身体）、`eye`（眼睛）、`arm`（手臂）或 `leg`（腿）。所有动作都按角色程序化生成，所以**做一个新角色不用画任何动画帧**。可以参考 [`skins/clawd/skin.json`](skins/clawd/skin.json)。
+皮肤就是一个 JSON 文件：网格大小、调色板，加上一组矩形部件。每个部件标一个角色：`body`（身体）、`eye`（眼睛）、`arm`（手臂）或 `leg`（腿）。所有动作都按角色程序化生成，所以**做一个新角色不用画任何动画帧**。在 `skins/` 下新建一个目录放进去，它就会自动出现在 **形象** 菜单里。
+
+几个可选字段：
+
+- `"render": "smooth"`：按实际分辨率平滑绘制，不做像素风。这时部件可以用 `"shape": "ellipse"`（椭圆）或 `"cloud"`（云朵），用 `"rot"` 倾斜，加 `"fur": true` 变成毛茸茸的。
+- `"actions"`：挑选会做的小动作，可选 `laptop`（敲代码）、`stocks`（炒股）、`coin`（吃TOKEN）、`shake`（抖毛）。不写就是前三个。
+
+可以参考 [`skins/clawd/skin.json`](skins/clawd/skin.json)（像素风）和 [`skins/dots/skin.json`](skins/dots/skin.json)（平滑、毛茸茸）。
 
 ### 许可
 
 引擎代码以 [MIT 许可](LICENSE) 开源。
 
 Clawd 是 Anthropic 旗下 Claude Code 的吉祥物。这个皮肤是**同人作品**，与 Anthropic 无关，也不代表官方。Clawd 形象**不在** MIT 许可范围内，详见 [`skins/clawd/README.md`](skins/clawd/README.md)。
+
+Dots 皮肤同样是 OpenAI 的 Dots 的**同人作品**，与 OpenAI 无关，也不代表官方，**不在** MIT 许可范围内，详见 [`skins/dots/README.md`](skins/dots/README.md)。

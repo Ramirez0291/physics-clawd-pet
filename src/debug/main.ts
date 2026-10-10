@@ -7,7 +7,7 @@ import {
   mergeTuning,
 } from '../engine/params';
 import type { Telemetry } from '../overlay/main';
-import { createBus, isTauri, saveTuning } from '../platform/host';
+import { type SkinInfo, createBus, isTauri, loadTuning, saveTuning } from '../platform/host';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -25,6 +25,7 @@ const MODE_NAMES: Record<string, string> = {
   laptop: '敲代码',
   stocks: '炒股',
   coin: '吃TOKEN',
+  shake: '抖毛',
 };
 const SIDE_NAMES: Record<string, string> = { floor: '地面', ceiling: '天花板', left: '左墙', right: '右墙' };
 const TIER_NAMES: Record<string, string> = {
@@ -161,15 +162,35 @@ async function main() {
   // ---------- 覆盖层状态 ----------
 
   let paused = false;
-  bus.on('tuning-state', (s: { tuning: Tuning; defaults: Tuning; paused: boolean }) => {
-    connected = true;
-    tuning = mergeTuning(DEFAULT_TUNING, s.tuning);
-    defaults = mergeTuning(DEFAULT_TUNING, s.defaults);
-    paused = s.paused;
-    $('pause').textContent = paused ? '继续' : '暂停';
-    $('pause').classList.toggle('active', paused);
-    renderAll();
-  });
+  const skinSelect = $<HTMLSelectElement>('skin');
+  bus.on(
+    'tuning-state',
+    (s: {
+      tuning: Tuning;
+      defaults: Tuning;
+      paused: boolean;
+      skins: SkinInfo[];
+      skin: string;
+      actions: string[];
+    }) => {
+      connected = true;
+      tuning = mergeTuning(DEFAULT_TUNING, s.tuning);
+      defaults = mergeTuning(DEFAULT_TUNING, s.defaults);
+      paused = s.paused;
+      $('pause').textContent = paused ? '继续' : '暂停';
+      $('pause').classList.toggle('active', paused);
+      skinSelect.replaceChildren(...s.skins.map(({ id, name }) => new Option(name, id, false, id === s.skin)));
+      // 当前形象不会的小动作按钮置灰（摸摸谁都会）
+      for (const b of document.querySelectorAll<HTMLButtonElement>('[data-act]')) {
+        const act = b.dataset.act!;
+        b.disabled = act !== 'petted' && !s.actions.includes(act);
+        b.title = b.disabled ? '这个形象不会这个动作' : '';
+      }
+      renderAll();
+    },
+  );
+  // 换形象会立即保存，不用再点"保存"
+  skinSelect.onchange = () => bus.emit('pet-skin', { id: skinSelect.value });
 
   bus.on('telemetry', (t: Telemetry) => {
     if (!connected) bus.emit('debug-hello');
@@ -213,7 +234,8 @@ async function main() {
 
   $('save').onclick = async () => {
     try {
-      const where = await saveTuning(tuning);
+      // 合并进已保存的文件：托盘菜单存的形象等设置不会被覆盖掉
+      const where = await saveTuning({ ...(await loadTuning()), ...tuning });
       note(`已保存到 ${where}`);
     } catch (e) {
       note(`保存失败：${e}`);

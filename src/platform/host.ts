@@ -104,6 +104,13 @@ export interface OverlayHost {
   clock(): number;
   /** 监听都挂好了，请求原生侧把当前状态全部推一遍 */
   ready(): void;
+  /** 托盘"形象"菜单：可选的皮肤和当前选中的那个 */
+  setSkins(list: SkinInfo[], current: string): void;
+}
+
+export interface SkinInfo {
+  id: string;
+  name: string;
 }
 
 const sameRect = (a: HitRect | null, b: HitRect | null) =>
@@ -142,6 +149,7 @@ export async function createOverlayHost(): Promise<OverlayHost> {
       onInput: (cb) => inputCbs.push(cb),
       clock: () => performance.now(),
       ready: () => {},
+      setSkins: () => {},
     };
   }
 
@@ -188,5 +196,6 @@ export async function createOverlayHost(): Promise<OverlayHost> {
     onInput: (cb) => inputCbs.push(cb),
     clock: () => (Number.isFinite(offset) ? performance.now() - offset : performance.now()),
     ready: () => void invoke('desk_ready'),
+    setSkins: (list, current) => void invoke('tray_set_skins', { skins: list, current }),
   };
 }

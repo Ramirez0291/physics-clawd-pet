@@ -259,8 +259,12 @@ export function spritePixel(T: Pick<Tuning, 'petScale' | 'artRes'>, dpr: number)
   return Math.max(1, Math.round((T.petScale * dpr) / artRes));
 }
 
-/** 一个皮肤格子实际画出来的边长（CSS 像素）。物理碰撞盒也用它，保证和画出来的一样大。 */
-export function cellSize(T: Pick<Tuning, 'petScale' | 'artRes'>, dpr: number): number {
+/**
+ * 一个皮肤格子实际画出来的边长（CSS 像素）。物理碰撞盒也用它，保证和画出来的一样大。
+ * 平滑画风的皮肤不用对齐像素，就是 petScale 本身。
+ */
+export function cellSize(T: Pick<Tuning, 'petScale' | 'artRes'>, dpr: number, pixelArt = true): number {
+  if (!pixelArt) return T.petScale;
   return (spritePixel(T, dpr) * Math.max(1, Math.round(T.artRes))) / dpr;
 }
 

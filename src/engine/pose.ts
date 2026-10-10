@@ -24,6 +24,8 @@ export interface Prop {
   h: number;
   rgba: number;
   torso?: boolean;
+  /** 平滑画风下画成柔边的椭圆（腮红） */
+  soft?: boolean;
 }
 
 /** 躯干（身体+眼睛+手臂）整体变换，以身体底边中点为锚 */
@@ -126,14 +128,17 @@ function codeLine(seed: number, i: number) {
 }
 
 /** 笔记本：底座贴着地面，屏幕朝外摆在 dir 那一侧 */
-function laptopProps(pet: Pet, gw: number, out: Prop[]) {
+function laptopProps(pet: Pet, grid: [number, number], out: Prop[]) {
   const open = laptopOpen(pet);
   if (open <= 0.02) return;
-  const gwPx = gw * 3;
+  const gwPx = grid[0] * 3;
   const flip = pet.dir < 0;
-  // x, y, w, h 都是道具像素；16×10 格的网格 = 48×30 道具像素
+  // x, y, w, h 都是道具像素，按 16×10 格（48×30 道具像素）的网格写，
+  // 再平移到实际网格：底座贴着网格底边，横向相对靠电脑那侧的边缘不变
+  const ox = gwPx - 48;
+  const oy = grid[1] * 3 - 30;
   const add = (x: number, y: number, w: number, h: number, rgba: number) =>
-    out.push({ x: (flip ? gwPx - x - w : x) * PX, y: y * PX, w: w * PX, h: h * PX, rgba });
+    out.push({ x: (flip ? gwPx - x - ox - w : x + ox) * PX, y: (y + oy) * PX, w: w * PX, h: h * PX, rgba });
 
   add(47, 28, 29, 1, C.shell);
   add(48, 29, 27, 1, C.shellDark);
@@ -145,8 +150,8 @@ function laptopProps(pet: Pet, gw: number, out: Prop[]) {
   // 屏幕内容不镜像：先算出屏幕左上角，再往里画
   const sw = 22;
   const sh = 16;
-  const sx = flip ? gwPx - 51 - sw : 51;
-  const sy = top + 1;
+  const sx = flip ? gwPx - 51 - ox - sw : 51 + ox;
+  const sy = top + oy + 1;
   const put = (x: number, y: number, w: number, h: number, rgba: number) =>
     out.push({ x: (sx + x) * PX, y: (sy + y) * PX, w: w * PX, h: h * PX, rgba });
   put(0, 0, sw, sh, C.screen);
@@ -226,18 +231,20 @@ const COIN_S = 0.45;
 const COIN_A = 1.05;
 const COIN_D = 1.3;
 
-function coinProps(pet: Pet, gw: number, out: Prop[]) {
+function coinProps(pet: Pet, skin: Skin, out: Prop[]) {
   const tm = pet.modeTime;
   const stage = COIN_STAGES[Math.min(3, pet.bites)];
   if (!stage.length) return;
-  const headY = -3;
-  const mouthY = 6.3;
+  const [gw, gh] = skin.grid;
+  // 举过头顶欣赏，再塞进眼睛下面的嘴里
+  const headY = skin.bodyBox.y - 3;
+  const mouthY = (skin.eyeBox ? skin.eyeBox.y + skin.eyeBox.h : gh * 0.4) + 2.3;
   let cx = gw / 2;
   let cy: number;
   if (tm < COIN_S) {
     const k = smoothstep(tm / COIN_S);
-    cx += pet.dir * 6.5 * (1 - k);
-    cy = 5 + (headY - 5) * k;
+    cx += pet.dir * (gw / 2 - 1.5) * (1 - k);
+    cy = gh / 2 + (headY - gh / 2) * k;
   } else if (tm < COIN_A) {
     cy = headY + Math.sin((tm - COIN_S) * 12) * 0.3;
   } else {
@@ -265,11 +272,21 @@ function coinProps(pet: Pet, gw: number, out: Prop[]) {
   }
 }
 
-/** 脸红：眼睛下面两小块 */
-function blushProps(gw: number, out: Prop[]) {
-  const gwPx = gw * 3;
-  for (const x of [9, gwPx - 9 - 5]) {
-    out.push({ x: x * PX, y: 13 * PX, w: 5 * PX, h: 2 * PX, rgba: C.blush, torso: true });
+/** 脸红：每只眼睛下面一小块，稍微偏外 */
+function blushProps(skin: Skin, out: Prop[]) {
+  for (const part of skin.parts) {
+    if (part.role !== 'eye' || part.side === 0) continue;
+    const [x, y, w, h] = part.rect;
+    const cx = (x + w / 2) * 3 + part.side * 2;
+    out.push({
+      x: (cx - 2.5) * PX,
+      y: ((y + h) * 3 + 1) * PX,
+      w: 5 * PX,
+      h: 2 * PX,
+      rgba: C.blush,
+      torso: true,
+      soft: true,
+    });
   }
 }
 
@@ -279,7 +296,7 @@ export function computePose(pet: Pet, skin: Skin): Pose {
   const parts = skin.parts.map(ident);
   const props: Prop[] = [];
   let look = lookVector(pet);
-  const bodyH = skin.parts.find((p) => p.role === 'body')?.rect[3] ?? skin.grid[1];
+  const bodyH = skin.bodyBox.h;
   const p = pet.modeDuration > 0 ? clamp(pet.modeTime / pet.modeDuration, 0, 1) : 0;
 
   let eyeSquint = blinking(t) ? 0.25 : 1;
@@ -404,7 +421,7 @@ export function computePose(pet: Pet, skin: Skin): Pose {
       });
       eyeSquint = 0.25;
       eyeLookScale = 0;
-      blushProps(skin.grid[0], props);
+      blushProps(skin, props);
       break;
     }
     case 'laptop':
@@ -422,8 +439,10 @@ export function computePose(pet: Pet, skin: Skin): Pose {
       each((pp, part) => {
         if (part.role !== 'arm') return;
         if (part.side === pet.dir) {
+          // 手伸到键盘上（键盘在网格底边往上 2/3 格）
+          const reach = skin.grid[1] - 0.67 - (part.rect[1] + part.rect[3]);
           pp.dx = part.side * open;
-          pp.dy = 3.33 * open + tap;
+          pp.dy = reach * open + tap;
         } else if (mood > 0.25) {
           pp.dy = -2.5; // 涨了！挥拳
         } else {
@@ -433,7 +452,7 @@ export function computePose(pet: Pet, skin: Skin): Pose {
       if (open > 0.5) look = { x: pet.dir, y: 0.6 };
       if (mood > 0.25) eyeSquint = blinking(t) ? 0.25 : 1.25;
       else if (mood < -0.25) eyeSquint = 0.5;
-      laptopProps(pet, skin.grid[0], props);
+      laptopProps(pet, skin.grid, props);
       break;
     }
     case 'coin': {
@@ -467,9 +486,29 @@ export function computePose(pet: Pet, skin: Skin): Pose {
         eyeSquint = 0.25;
         eyeLookScale = 0;
         torso.dy = Math.sin(t * 9) > 0 ? -0.33 : 0;
-        blushProps(skin.grid[0], props);
+        blushProps(skin, props);
       }
-      coinProps(pet, skin.grid[0], props);
+      coinProps(pet, skin, props);
+      break;
+    }
+    case 'shake': {
+      // 抖毛：身体左右猛甩、毛炸开一点，眼睛眯成缝，手脚跟着乱甩；脚踩在原地不动
+      const tm = pet.modeTime;
+      const env = smoothstep(tm / 0.2) * (1 - smoothstep((tm - (pet.modeDuration - 0.35)) / 0.35));
+      const wob = Math.sin(tm * 38);
+      crouchBy(0.4 * env);
+      torso.dx = wob * 0.7 * env;
+      torso.sx = 1 + 0.06 * env * Math.abs(wob);
+      each((pp, part, i) => {
+        if (part.role === 'arm') {
+          pp.dx = part.side * 0.4 * env;
+          pp.dy = (-0.8 + Math.sin(tm * 38 + part.side) * 0.5) * env;
+        } else if (part.role === 'leg') {
+          pp.dy = Math.sin(tm * 19 + i * Math.PI) > 0.3 ? -0.4 * env : 0;
+        }
+      });
+      if (env > 0.3) eyeSquint = 0.25;
+      eyeLookScale = 0;
       break;
     }
   }

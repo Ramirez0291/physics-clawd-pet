@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::{
@@ -88,9 +88,11 @@ fn create_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
 struct Texts {
     debug_title: &'static str,
     debug: &'static str,
+    /// 下面三个里的 {name} 换成当前形象的名字
     reset: &'static str,
     hide: &'static str,
     show: &'static str,
+    character: &'static str,
     size: &'static str,
     bigger: &'static str,
     smaller: &'static str,
@@ -102,9 +104,10 @@ struct Texts {
 const ZH: Texts = Texts {
     debug_title: "Clawd 调教面板",
     debug: "调教面板",
-    reset: "把 Clawd 叫回来",
-    hide: "隐藏 Clawd",
-    show: "显示 Clawd",
+    reset: "把 {name} 叫回来",
+    hide: "隐藏 {name}",
+    show: "显示 {name}",
+    character: "形象",
     size: "大小",
     bigger: "放大",
     smaller: "缩小",
@@ -115,9 +118,10 @@ const ZH: Texts = Texts {
 const EN: Texts = Texts {
     debug_title: "Clawd Tuning Panel",
     debug: "Tuning panel",
-    reset: "Bring Clawd back",
-    hide: "Hide Clawd",
-    show: "Show Clawd",
+    reset: "Bring {name} back",
+    hide: "Hide {name}",
+    show: "Show {name}",
+    character: "Character",
     size: "Size",
     bigger: "Bigger",
     smaller: "Smaller",
@@ -220,16 +224,72 @@ fn desk_ready(state: State<Shared>) {
     s.input_resync = true;
 }
 
-struct HideItem(MenuItem<tauri::Wry>);
+/// 托盘菜单里要随形象/状态改文字的几项
+struct TrayItems {
+    reset: MenuItem<tauri::Wry>,
+    hide: MenuItem<tauri::Wry>,
+    skins: Submenu<tauri::Wry>,
+    /// 当前形象的名字
+    name: Mutex<String>,
+}
+
+impl TrayItems {
+    fn sync_labels(&self, app: &AppHandle, hidden: bool) -> tauri::Result<()> {
+        let t = texts();
+        let name = self.name.lock().unwrap().clone();
+        self.reset.set_text(t.reset.replace("{name}", &name))?;
+        self.hide.set_text((if hidden { t.show } else { t.hide }).replace("{name}", &name))?;
+        if let Some(tray) = app.tray_by_id("main") {
+            tray.set_tooltip(Some(&name))?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct SkinInfo {
+    id: String,
+    name: String,
+}
+
+/// 覆盖层告诉托盘有哪些形象、当前是哪个（菜单项 id 是 "skin:<id>"）
+#[tauri::command]
+fn tray_set_skins(
+    app: AppHandle,
+    state: State<Shared>,
+    skins: Vec<SkinInfo>,
+    current: String,
+) -> Result<(), String> {
+    let Some(items) = app.try_state::<TrayItems>() else {
+        return Ok(());
+    };
+    let err = |e: tauri::Error| e.to_string();
+    for old in items.skins.items().map_err(err)? {
+        items.skins.remove(&old).map_err(err)?;
+    }
+    for s in &skins {
+        let id = format!("skin:{}", s.id);
+        let item = CheckMenuItem::with_id(&app, id, &s.name, true, s.id == current, None::<&str>).map_err(err)?;
+        items.skins.append(&item).map_err(err)?;
+    }
+    if let Some(s) = skins.iter().find(|s| s.id == current) {
+        *items.name.lock().unwrap() = s.name.clone();
+    }
+    let hidden = state.lock().unwrap().manual_hidden;
+    items.sync_labels(&app, hidden).map_err(err)
+}
 
 /// 托盘"大小"菜单的预设（px/格），id 是 "size:<值>"；名字在 Texts::presets 里
 const SIZE_PRESETS: [f64; 4] = [4.0, 6.0, 9.0, 12.0];
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let t = texts();
+    // 形象列表和带名字的菜单文字等覆盖层加载好后由 tray_set_skins 填上
+    let name = "Clawd";
     let debug = MenuItem::with_id(app, "debug", t.debug, true, None::<&str>)?;
-    let reset = MenuItem::with_id(app, "reset", t.reset, true, None::<&str>)?;
-    let hide = MenuItem::with_id(app, "hide", t.hide, true, None::<&str>)?;
+    let reset = MenuItem::with_id(app, "reset", t.reset.replace("{name}", name), true, None::<&str>)?;
+    let hide = MenuItem::with_id(app, "hide", t.hide.replace("{name}", name), true, None::<&str>)?;
+    let skins = Submenu::with_id(app, "skins", t.character, true)?;
     let size = Submenu::with_id(app, "size", t.size, true)?;
     size.append(&MenuItem::with_id(app, "size+", t.bigger, true, None::<&str>)?)?;
     size.append(&MenuItem::with_id(app, "size-", t.smaller, true, None::<&str>)?)?;
@@ -239,11 +299,16 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     }
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", t.quit, true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&debug, &reset, &hide, &size, &sep, &quit])?;
-    app.manage(HideItem(hide));
+    let menu = Menu::with_items(app, &[&debug, &reset, &hide, &skins, &size, &sep, &quit])?;
+    app.manage(TrayItems {
+        reset,
+        hide,
+        skins,
+        name: Mutex::new(name.into()),
+    });
 
     let mut builder = TrayIconBuilder::with_id("main")
-        .tooltip("Clawd")
+        .tooltip(name)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -260,8 +325,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                     s.manual_hidden = !s.manual_hidden;
                     s.manual_hidden
                 };
-                let item = &app.state::<HideItem>().0;
-                let _ = item.set_text(if hidden { texts().show } else { texts().hide });
+                let _ = app.state::<TrayItems>().sync_labels(app, hidden);
             }
             "quit" => app.exit(0),
             // 覆盖层负责夹到范围内并保存
@@ -274,6 +338,9 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             id => {
                 if let Some(scale) = id.strip_prefix("size:").and_then(|v| v.parse::<f64>().ok()) {
                     let _ = app.emit("pet-size", serde_json::json!({ "scale": scale }));
+                } else if let Some(skin) = id.strip_prefix("skin:") {
+                    // 覆盖层换好后会调 tray_set_skins 更新勾选
+                    let _ = app.emit("pet-skin", serde_json::json!({ "id": skin }));
                 }
             }
         })
@@ -305,12 +372,14 @@ pub fn run() {
             desk_set_hit,
             desk_set_dragging,
             desk_set_carrier,
-            desk_ready
+            desk_ready,
+            tray_set_skins
         ])
         .setup(|app| {
             let handle = app.handle();
-            create_overlay(handle)?;
+            // 托盘先建好：覆盖层一加载就会调 tray_set_skins
             build_tray(handle)?;
+            create_overlay(handle)?;
             // 开发时直接打开调教面板，调手感最常用
             #[cfg(debug_assertions)]
             show_debug(handle)?;

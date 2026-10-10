@@ -1,0 +1,25 @@
+{
+  "id": "dots",
+  "name": "Dots",
+  "description": "戴贝雷帽的蓝色毛球（同人皮肤，非官方）",
+  "grid": [14, 12],
+  "render": "smooth",
+  "palette": {
+    "body": "#1797EA",
+    "hat": "#18191D",
+    "eye": "#0B0B10"
+  },
+  "fur": { "length": 0.6, "light": "#6AC8FF", "shade": "#0A5FAE" },
+  "actions": ["laptop", "coin", "shake"],
+  "parts": [
+    { "id": "leg0", "role": "leg", "rect": [2.8, 9.4, 3, 2.6], "color": "body", "shape": "ellipse", "fur": true },
+    { "id": "leg1", "role": "leg", "rect": [8.2, 9.4, 3, 2.6], "color": "body", "shape": "ellipse", "fur": true },
+    { "id": "armL", "role": "arm", "rect": [0, 5, 3, 3], "color": "body", "shape": "ellipse", "fur": true },
+    { "id": "armR", "role": "arm", "rect": [11, 5, 3, 3], "color": "body", "shape": "ellipse", "fur": true },
+    { "id": "body", "role": "body", "rect": [0.6, 2.2, 12.8, 9.4], "color": "body", "shape": "cloud", "fur": true },
+    { "id": "hatStem", "role": "body", "rect": [4.6, 0.3, 0.9, 1.2], "color": "hat", "shape": "ellipse" },
+    { "id": "hat", "role": "body", "rect": [0, 1.1, 10.2, 3.7], "color": "hat", "shape": "ellipse", "rot": -9 },
+    { "id": "eyeL", "role": "eye", "rect": [5, 5.5, 0.9, 1.4], "color": "eye", "shape": "ellipse" },
+    { "id": "eyeR", "role": "eye", "rect": [8.1, 5.5, 0.9, 1.4], "color": "eye", "shape": "ellipse" }
+  ]
+}
