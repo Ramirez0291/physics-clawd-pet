@@ -1,6 +1,6 @@
 [package]
 name = "clawd-pet"
-version = "0.1.0"
+version = "0.2.0"
 description = "A desktop pet with exaggerated cartoon physics"
 edition = "2021"
 license = "MIT"
