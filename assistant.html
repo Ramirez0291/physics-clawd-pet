@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clawd 小助手</title>
+    <link rel="stylesheet" href="/src/assistant/assistant.css" />
+  </head>
+  <body>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="todo" data-t="tabTodo"></button>
+      <button role="tab" data-tab="calendar" data-t="tabCalendar"></button>
+      <button role="tab" data-tab="remind" data-t="tabRemind"></button>
+    </nav>
+
+    <main>
+      <section id="tab-todo" hidden>
+        <form id="todoForm" class="add-row">
+          <input id="todoText" type="text" maxlength="200" autocomplete="off" data-t-placeholder="todoPlaceholder" />
+          <input id="todoDue" type="datetime-local" data-t-title="dueTitle" />
+          <button class="primary" type="submit" data-t="add"></button>
+        </form>
+        <ul id="todoList" class="list"></ul>
+        <p id="todoEmpty" class="empty" data-t="todoEmpty"></p>
+        <details id="doneBox" class="done-box">
+          <summary id="doneSummary"></summary>
+          <ul id="doneList" class="list"></ul>
+          <button id="clearDone" type="button" data-t="clearDone"></button>
+        </details>
+      </section>
+
+      <section id="tab-calendar" hidden>
+        <h2 data-t="sources"></h2>
+        <ul id="sourceList" class="list"></ul>
+        <p id="sourceEmpty" class="empty" data-t="sourceEmpty"></p>
+        <form id="urlForm" class="add-row">
+          <input id="urlInput" type="url" autocomplete="off" data-t-placeholder="urlPlaceholder" />
+          <button class="primary" type="submit" data-t="subscribe"></button>
+        </form>
+        <div class="row-actions">
+          <button id="pickFile" type="button" data-t="pickFile"></button>
+          <button id="refresh" type="button" data-t="refresh"></button>
+        </div>
+        <p class="hint" data-t="urlHint"></p>
+
+        <h2 data-t="calSettings"></h2>
+        <div class="settings">
+          <label><span data-t="leadMin"></span> <input id="leadMin" type="number" min="0" max="120" /> <span data-t="minutes"></span></label>
+          <label><span data-t="refreshMin"></span> <input id="refreshMin" type="number" min="5" max="1440" /> <span data-t="minutes"></span></label>
+          <label><span data-t="allDayHour"></span> <select id="allDayHour"></select></label>
+        </div>
+
+        <h2 data-t="upcoming"></h2>
+        <div id="upcoming"></div>
+      </section>
+
+      <section id="tab-remind" hidden>
+        <h2><label class="switch"><input id="chimeOn" type="checkbox" /> <span data-t="chime"></span></label></h2>
+        <div class="settings">
+          <label><span data-t="chimeFrom"></span> <select id="chimeFrom"></select></label>
+          <label><span data-t="chimeTo"></span> <select id="chimeTo"></select></label>
+        </div>
+        <p class="hint" data-t="chimeHint"></p>
+
+        <h2><label class="switch"><input id="restOn" type="checkbox" /> <span data-t="rest"></span></label></h2>
+        <div class="settings">
+          <label><span data-t="workMin"></span> <input id="workMin" type="number" min="5" max="240" /> <span data-t="minutes"></span></label>
+          <label><span data-t="awayMin"></span> <input id="awayMin" type="number" min="1" max="60" /> <span data-t="minutes"></span></label>
+          <label><span data-t="repeatMin"></span> <input id="repeatMin" type="number" min="1" max="120" /> <span data-t="minutes"></span></label>
+        </div>
+        <p id="activeNow" class="hint"></p>
+
+        <h2 data-t="tryIt"></h2>
+        <div class="row-actions">
+          <button type="button" data-test="chime" data-t="testChime"></button>
+          <button type="button" data-test="rest" data-t="testRest"></button>
+          <button type="button" data-test="event" data-t="testEvent"></button>
+          <button type="button" data-test="todo" data-t="testTodo"></button>
+        </div>
+      </section>
+    </main>
+    <footer id="note" class="note"></footer>
+    <script type="module" src="/src/assistant/main.ts"></script>
+  </body>
+</html>

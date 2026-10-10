@@ -43,6 +43,14 @@ Grab it, fling it across your screen, and watch it tumble, superhero-land, or st
 - **Stays out of your way.** It walks away from the text box you're typing in, and hides while a full-screen app (game, video, slides) is running.
 - **Never steals focus or clicks.** Only the pet itself is clickable. Everything else clicks straight through to the windows below.
 
+**It keeps you on schedule**
+
+- **Hourly chime.** On the hour it holds up a bell and rings it once per hour on the clock (only within the hours you choose).
+- **Break reminders.** After 45 minutes of continuous keyboard and mouse use it stretches and tells you to take a break. Step away for 5 minutes and the timer resets on its own.
+- **Calendar.** Subscribe to any iCal link (Google, Outlook, Feishu, DingTalk…) or pick a local `.ics` file. Before an event starts, Clawd runs to the middle of the screen holding up a calendar page.
+- **To-dos.** Give a to-do a due time and Clawd brings you a checklist sign when it's due. Mark it done right from the bubble.
+- Reminders appear as a speech bubble above its head. Clawd waits in place until you answer.
+
 **Two characters:** Clawd, and Dots, the blue fluffball in a beret. Switch between them any time from the tray menu. Each has its own habits: Dots doesn't trade stocks, but sometimes gives itself a good shake and sends tufts of fur flying.
 
 ### Download
@@ -56,6 +64,7 @@ Requires Windows 10 or 11 with WebView2 (already included in Windows 11).
 
 | Action | How |
 | --- | --- |
+| To-dos, calendar, reminders | Tray icon → right-click → **Assistant** |
 | Throw | Drag Clawd and let go while moving the mouse |
 | Pet | Wiggle the cursor back and forth over its head |
 | Switch character | Tray icon → right-click → **Character** |
@@ -96,7 +105,8 @@ npm test              # engine unit tests
 src/
   engine/     Physics, state machine and procedural animation. Pure logic, unit-tested.
   render/     Pixel-art rasterizer, smooth/fur renderer and effects
-  overlay/    Main loop, mouse input, link to the tuning panel
+  overlay/    Main loop, mouse input, link to the tuning panel, reminder bubbles
+  assistant/  To-dos, iCal parser, reminder scheduler, Assistant window
   debug/      Tuning panel
   platform/   Tauri and browser implementations
   skin/       Skin format and loader
@@ -150,6 +160,14 @@ The Dots skin is likewise **fan art** of OpenAI's Dots, not affiliated with or e
 - **不碍事：** 你在哪个输入框打字，它就从那里让开；全屏玩游戏、看视频、放幻灯片时自动隐藏。
 - **不抢焦点、不挡点击：** 只有宠物本身能点到，其他地方的点击都会穿透到下面的窗口。
 
+**帮你守时间**
+
+- **整点报时：** 到整点举起铃铛摇，几点就摇几下，只在你设定的时段里报。
+- **休息提醒：** 连续用电脑（按真实的键鼠操作算）满 45 分钟，伸个大懒腰提醒你起来走走；离开 5 分钟自动重新计时。
+- **日历：** 可以订阅任意 iCal 链接（Google、Outlook、飞书、钉钉……），也可以选本地 `.ics` 文件。日程开始前，Clawd 会举着日历页跑到屏幕中间。
+- **待办：** 给待办设个截止时间，到点 Clawd 举着清单牌子来提醒，在气泡上就能直接勾掉。
+- 提醒会在它头顶冒一个对话气泡，它会站在原地等你回应。
+
 **两个形象：** Clawd，以及戴贝雷帽的蓝色毛球 Dots。随时可以在托盘菜单里切换。两个形象的习惯不一样：Dots 不炒股，但时不时会使劲抖一抖毛，甩出几撮毛团。
 
 ### 下载
@@ -163,6 +181,7 @@ The Dots skin is likewise **fan art** of OpenAI's Dots, not affiliated with or e
 
 | 操作 | 方法 |
 | --- | --- |
+| 待办、日历、提醒 | 托盘图标右键 → **小助手** |
 | 甩 | 按住 Clawd 拖动，边移动鼠标边松手 |
 | 摸摸 | 在它头上来回晃鼠标 |
 | 换形象 | 托盘图标右键 → **形象** |

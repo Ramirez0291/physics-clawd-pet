@@ -15,8 +15,8 @@ pub const OVERLAY: &str = "overlay";
 /// 前端通过命令写入、观察线程读取的状态
 #[derive(Default)]
 pub struct DeskState {
-    /// 宠物可点击区域 [x0, y0, x1, y1]，覆盖层 CSS 像素
-    pub hit: Option<[f64; 4]>,
+    /// 可点击区域 [x0, y0, x1, y1]（覆盖层 CSS 像素）：第一个是宠物，后面是气泡之类
+    pub hits: Vec<[f64; 4]>,
     pub dragging: bool,
     /// 宠物脚下的窗口，需要高频追踪它的位置
     pub carrier: Option<isize>,
@@ -101,9 +101,9 @@ fn run(app: AppHandle, shared: Shared, overlay_hwnd: isize, area: Rect) {
     let mut carrier_rect: Option<(isize, Rect)> = None;
 
     loop {
-        let (hit, dragging, carrier, manual_hidden, resync) = {
+        let (hits, dragging, carrier, manual_hidden, resync) = {
             let mut s = shared.lock().unwrap();
-            (s.hit, s.dragging, s.carrier, s.manual_hidden, std::mem::take(&mut s.resync))
+            (s.hits.clone(), s.dragging, s.carrier, s.manual_hidden, std::mem::take(&mut s.resync))
         };
         let Some(win) = app.get_webview_window(OVERLAY) else {
             thread::sleep(Duration::from_millis(100));
@@ -155,7 +155,7 @@ fn run(app: AppHandle, shared: Shared, overlay_hwnd: isize, area: Rect) {
         // 光标：决定点击穿透，顺便给眼睛跟随用（限 15Hz，且只在宠物附近）
         if let Some((cx, cy)) = desktop::cursor_pos() {
             let (x, y) = (geo.x(cx), geo.y(cy));
-            let over = hit.is_some_and(|r| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]);
+            let over = hits.iter().any(|r| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]);
             let want_ignore = !(over || dragging);
             if want_ignore != ignoring && win.set_ignore_cursor_events(want_ignore).is_ok() {
                 ignoring = want_ignore;
@@ -164,7 +164,7 @@ fn run(app: AppHandle, shared: Shared, overlay_hwnd: isize, area: Rect) {
                 hover = over;
                 let _ = app.emit_to(OVERLAY, "desk-hover", hover);
             }
-            let near = hit.is_none_or(|r| {
+            let near = hits.first().is_none_or(|r| {
                 let (mx, my) = ((r[0] + r[2]) / 2.0, (r[1] + r[3]) / 2.0);
                 (x - mx).hypot(y - my) < 1400.0
             });

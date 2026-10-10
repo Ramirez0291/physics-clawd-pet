@@ -67,6 +67,87 @@ export async function openDebugPanel() {
   }
 }
 
+// ---------- 小助手 ----------
+
+const LS_ASSISTANT = 'clawd-pet:assistant';
+
+export async function loadAssistant(): Promise<unknown> {
+  if (isTauri) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<unknown>('load_assistant').catch(() => null);
+  }
+  try {
+    const s = localStorage.getItem(LS_ASSISTANT);
+    return s ? JSON.parse(s) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 保存并广播 'assistant-data'（覆盖层和小助手窗口都会收到，包括自己） */
+export async function saveAssistant(data: object): Promise<void> {
+  if (isTauri) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('save_assistant', { data });
+    return;
+  }
+  localStorage.setItem(LS_ASSISTANT, JSON.stringify(data));
+  // BroadcastChannel 不会发给发送者自己这个对象，但同一页面里 createBus 建的那个能收到
+  new BroadcastChannel('clawd-pet').postMessage({ event: 'assistant-data', payload: data });
+}
+
+export async function openAssistantPanel() {
+  if (isTauri) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('open_assistant');
+  } else {
+    window.open('/assistant.html', 'clawd-assistant', 'width=480,height=680');
+  }
+}
+
+/** 浏览器预览：用页面里的鼠标键盘事件近似"多久没操作了" */
+let lastInput = typeof performance !== 'undefined' ? performance.now() : 0;
+if (!isTauri && typeof window !== 'undefined') {
+  for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel']) {
+    window.addEventListener(ev, () => (lastInput = performance.now()), { passive: true, capture: true });
+  }
+}
+
+/** 距离上一次键盘/鼠标操作多少毫秒（整个系统的） */
+export async function idleMs(): Promise<number> {
+  if (isTauri) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<number>('desk_idle_ms').catch(() => 0);
+  }
+  return performance.now() - lastInput;
+}
+
+/** 下载文本（日历订阅）。Tauri 下由原生侧下载，不受跨域限制 */
+export async function fetchText(url: string): Promise<string> {
+  if (isTauri) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<string>('fetch_text', { url });
+  }
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.text();
+}
+
+export async function readTextFile(path: string): Promise<string> {
+  if (isTauri) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<string>('read_text_file', { path });
+  }
+  throw new Error('浏览器预览里读不了本地文件');
+}
+
+/** 弹出系统的"打开文件"对话框选 .ics，取消返回 null */
+export async function pickIcsFile(): Promise<string | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<string | null>('pick_ics_file');
+}
+
 export type HitRect = [x0: number, y0: number, x1: number, y1: number];
 
 /** 被追踪窗口的一次位置采样（覆盖层 CSS 像素） */
@@ -90,8 +171,8 @@ export interface OverlayHost {
   cursor(): Vec2 | null;
   /** 光标是否在宠物上（此时覆盖层不穿透，可以抓） */
   hovering(): boolean;
-  /** 宠物的可点击区域；相同的值会被去重 */
-  setHitRect(r: HitRect | null): void;
+  /** 可点击区域：第一个是宠物，后面是气泡之类；和上次一样就不发 */
+  setHitRects(list: HitRect[]): void;
   setDragging(on: boolean): void;
   /** 开始/停止高频追踪某个窗口（宠物脚下那个） */
   setCarrier(id: number | null): void;
@@ -113,13 +194,14 @@ export interface SkinInfo {
   name: string;
 }
 
-const sameRect = (a: HitRect | null, b: HitRect | null) =>
-  a === b || (a !== null && b !== null && a.every((v, i) => Math.abs(v - b[i]) < 0.5));
+const sameRect = (a: HitRect, b: HitRect) => a.every((v, i) => Math.abs(v - b[i]) < 0.5);
+const sameRects = (a: HitRect[], b: HitRect[]) => a.length === b.length && a.every((r, i) => sameRect(r, b[i]));
+const inRect = (r: HitRect, p: Vec2) => p.x >= r[0] && p.x <= r[2] && p.y >= r[1] && p.y <= r[3];
 
 export async function createOverlayHost(): Promise<OverlayHost> {
   if (!isTauri) {
     let cur: Vec2 | null = null;
-    let hit: HitRect | null = null;
+    let hits: HitRect[] = [];
     window.addEventListener('pointermove', (e) => (cur = { x: e.clientX, y: e.clientY }));
     window.addEventListener('pointerleave', () => (cur = null));
     // 预览页里的输入框获得焦点时，当成"正在输入的输入框"
@@ -139,8 +221,8 @@ export async function createOverlayHost(): Promise<OverlayHost> {
     window.addEventListener('resize', emitInput);
     return {
       cursor: () => cur,
-      hovering: () => !!cur && !!hit && cur.x >= hit[0] && cur.x <= hit[2] && cur.y >= hit[1] && cur.y <= hit[3],
-      setHitRect: (r) => (hit = r),
+      hovering: () => !!cur && hits.some((r) => inRect(r, cur!)),
+      setHitRects: (list) => (hits = list),
       setDragging: () => {},
       setCarrier: () => {},
       onPlatforms: () => {},
@@ -158,7 +240,7 @@ export async function createOverlayHost(): Promise<OverlayHost> {
 
   let cur: Vec2 | null = null;
   let hover = false;
-  let lastHit: HitRect | null = null;
+  let lastHits: HitRect[] = [];
   // Rust 时钟 = performance.now() - offset；取观测到的最小延迟作为偏移
   let offset = Infinity;
   const platformCbs: ((list: Platform[]) => void)[] = [];
@@ -183,10 +265,10 @@ export async function createOverlayHost(): Promise<OverlayHost> {
   return {
     cursor: () => cur,
     hovering: () => hover,
-    setHitRect(r) {
-      if (sameRect(r, lastHit)) return;
-      lastHit = r;
-      void invoke('desk_set_hit', { rect: r });
+    setHitRects(list) {
+      if (sameRects(list, lastHits)) return;
+      lastHits = list;
+      void invoke('desk_set_hits', { rects: list });
     },
     setDragging: (on) => void invoke('desk_set_dragging', { on }),
     setCarrier: (id) => void invoke('desk_set_carrier', { id }),

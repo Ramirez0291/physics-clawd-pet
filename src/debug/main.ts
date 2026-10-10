@@ -7,7 +7,7 @@ import {
   mergeTuning,
 } from '../engine/params';
 import type { Telemetry } from '../overlay/main';
-import { type SkinInfo, createBus, isTauri, loadTuning, saveTuning } from '../platform/host';
+import { type SkinInfo, createBus, isTauri, loadTuning, openAssistantPanel, saveTuning } from '../platform/host';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -26,6 +26,9 @@ const MODE_NAMES: Record<string, string> = {
   stocks: '炒股',
   coin: '吃TOKEN',
   shake: '抖毛',
+  chime: '报时',
+  stretch: '伸懒腰',
+  sign: '举牌子',
 };
 const SIDE_NAMES: Record<string, string> = { floor: '地面', ceiling: '天花板', left: '左墙', right: '右墙' };
 const TIER_NAMES: Record<string, string> = {
@@ -180,10 +183,10 @@ async function main() {
       $('pause').textContent = paused ? '继续' : '暂停';
       $('pause').classList.toggle('active', paused);
       skinSelect.replaceChildren(...s.skins.map(({ id, name }) => new Option(name, id, false, id === s.skin)));
-      // 当前形象不会的小动作按钮置灰（摸摸谁都会）
+      // 当前形象不会的小动作按钮置灰（摸摸和提醒动作谁都会）
       for (const b of document.querySelectorAll<HTMLButtonElement>('[data-act]')) {
         const act = b.dataset.act!;
-        b.disabled = act !== 'petted' && !s.actions.includes(act);
+        b.disabled = act !== 'petted' && !b.hasAttribute('data-cue') && !s.actions.includes(act);
         b.title = b.disabled ? '这个形象不会这个动作' : '';
       }
       renderAll();
@@ -223,6 +226,7 @@ async function main() {
   $('step').onclick = () => cmd('step');
   $('reset').onclick = () => cmd('reset');
   $('replay').onclick = () => cmd('replay');
+  $('openAssistant').onclick = () => void openAssistantPanel();
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-preset]')) {
     b.onclick = () => cmd('preset', b.dataset.preset);
   }

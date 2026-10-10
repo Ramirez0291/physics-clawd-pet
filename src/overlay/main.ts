@@ -1,11 +1,12 @@
 import { type Vec2, clamp } from '../engine/math';
 import { DEFAULT_TUNING, PARAM_DEFS, cellSize, mergeTuning, type Tuning } from '../engine/params';
 import { ParticleSystem } from '../engine/particles';
-import { ACTIVITIES, type Activity, type Bounds, type LaunchState, Pet } from '../engine/pet';
+import { ACTIVITIES, type Activity, type Bounds, CUES, type Cue, type LaunchState, Pet } from '../engine/pet';
 import { VelocitySampler } from '../engine/throw';
 import {
   type CarrierSample,
   createBus,
+  type HitRect,
   createOverlayHost,
   isTauri,
   loadTuning,
@@ -14,9 +15,10 @@ import {
 } from '../platform/host';
 import { Renderer } from '../render/renderer';
 import { SKINS, findSkin } from '../skin/registry';
+import { Companion } from './companion';
 
 /** 这些状态下动作幅度小，可以降帧省电 */
-const CALM_MODES = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin']);
+const CALM_MODES = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin', 'sign']);
 
 /** 固定物理步长：与显示器刷新率无关 */
 const STEP = 1 / 120;
@@ -143,6 +145,11 @@ async function main() {
   });
   host.ready();
 
+  // ---------- 小助手：报时、休息、日程、待办 ----------
+
+  const companion = new Companion(bus, pet, () => renderer.hitRect(0), () => dndHidden);
+  void companion.start();
+
   // ---------- 鼠标 ----------
 
   let drag: { id: number; downAt: number; x0: number; y0: number; moved: number } | null = null;
@@ -237,6 +244,8 @@ async function main() {
         // 当前皮肤不会的小动作，perform 会拒绝
         if (msg.arg === 'petted' || ACTIVITIES.includes(msg.arg as Activity)) {
           pet.perform(msg.arg as 'petted' | Activity);
+        } else if (CUES.includes(msg.arg as Cue)) {
+          pet.cue(msg.arg as Cue, { count: new Date().getHours() % 12 || 12 });
         }
         break;
     }
@@ -367,6 +376,7 @@ async function main() {
     last = now;
     if (dndHidden) {
       // 覆盖层已被隐藏：什么都不算，低频等待恢复
+      companion.frame(now);
       setTimeout(() => frame(performance.now()), 250);
       return;
     }
@@ -413,11 +423,16 @@ async function main() {
     if (n >= MAX_STEPS) acc = 0;
 
     renderer.draw(pet, particles, tuning, simDt);
+    const bubble = companion.frame(now);
 
     // 把可点击区域告诉原生侧（它负责悬停判定和点击穿透）。平静时 10Hz 就够。
     if (!calm() || now - hitSentAt >= 100) {
       hitSentAt = now;
-      host.setHitRect(renderer.hitRect(tuning.hitPadding));
+      const hits: HitRect[] = [];
+      const body = renderer.hitRect(tuning.hitPadding);
+      if (body) hits.push(body);
+      if (bubble) hits.push(bubble);
+      host.setHitRects(hits);
     }
 
     fpsFrames++;

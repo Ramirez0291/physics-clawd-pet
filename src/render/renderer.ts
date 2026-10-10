@@ -44,6 +44,8 @@ const GHOST_LIFE = 0.12;
 const STAR = '#f5c542';
 const INK = '#141413';
 const HEART = ['.#.#.', '#####', '.###.', '..#..'];
+/** 八分音符 */
+const NOTE = ['..##.', '..#.#', '..#..', '###..', '###..'];
 
 /**
  * 像素风渲染：宠物先在低分辨率网格里按"旋转+形变"逐像素采样，再用最近邻放大。
@@ -375,18 +377,19 @@ export class Renderer {
         }
         continue;
       }
-      if (p.kind === 'heart') {
-        // 像素小爱心，快消失时缩小一号
+      if (p.kind === 'heart' || p.kind === 'note') {
+        // 像素小爱心/音符，快消失时缩小一号
+        const art = p.kind === 'heart' ? HEART : NOTE;
         const u = Math.max(1, Math.round(up * (k > 0.35 ? 1.5 : 1)));
         const x0 = Math.round(p.x * d - 2.5 * u);
-        const y0 = Math.round(p.y * d - 2 * u);
+        const y0 = Math.round(p.y * d - (art.length / 2) * u);
         this.ctx.fillStyle = p.color;
-        for (let j = 0; j < HEART.length; j++) {
-          for (let i = 0; i < HEART[j].length; i++) {
-            if (HEART[j][i] === '#') this.ctx.fillRect(x0 + i * u, y0 + j * u, u, u);
+        for (let j = 0; j < art.length; j++) {
+          for (let i = 0; i < art[j].length; i++) {
+            if (art[j][i] === '#') this.ctx.fillRect(x0 + i * u, y0 + j * u, u, u);
           }
         }
-        this.markDirty(x0, y0, 5 * u, 4 * u);
+        this.markDirty(x0, y0, 5 * u, art.length * u);
         continue;
       }
       if (p.kind === 'fluff') {

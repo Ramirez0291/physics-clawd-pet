@@ -11,7 +11,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     rollupOptions: {
-      input: { main: 'index.html', debug: 'debug.html' },
+      input: { main: 'index.html', debug: 'debug.html', assistant: 'assistant.html' },
     },
   },
 });

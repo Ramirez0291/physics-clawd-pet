@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Overlay and debug panel windows",
-  "windows": ["overlay", "debug"],
+  "description": "Overlay, debug panel and assistant windows",
+  "windows": ["overlay", "debug", "assistant"],
   "permissions": [
     "core:default",
     "core:window:allow-set-ignore-cursor-events",

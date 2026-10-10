@@ -342,3 +342,68 @@ describe('避让输入框', () => {
     expect(pet.blocksInput(pet.pos.x, pet.pos.y)).toBe(false);
   });
 });
+
+describe('提醒动作', () => {
+  it('报时：几点就摇几下铃，摇完回去发呆', () => {
+    const pet = makePet();
+    pet.placeOnFloor(800);
+    pet.cue('chime', { count: 3 });
+    expect(pet.mode).toBe('chime');
+    let dings = 0;
+    for (let i = 0; i < 4 / STEP && pet.mode === 'chime'; i++) {
+      pet.step(STEP, null);
+      dings += pet.consumeEvents().filter((e) => e.type === 'ding').length;
+    }
+    expect(dings).toBe(3);
+    expect(pet.mode).toBe('idle');
+  });
+
+  it('举牌子：先跑到屏幕中间', () => {
+    const pet = makePet();
+    pet.placeOnFloor(200);
+    pet.cue('sign', { sign: 'todo' });
+    expect(pet.mode).toBe('walk');
+    expect(pet.seeking).toBe(true);
+    run(pet, 6, (p) => p.mode === 'sign');
+    expect(pet.mode).toBe('sign');
+    expect(pet.signKind).toBe('todo');
+    expect(Math.abs(pet.pos.x - W / 2)).toBeLessThanOrEqual(pet.halfW);
+  });
+
+  it('举牌子：在墙上先跳下来', () => {
+    const pet = makePet();
+    pet.launch({ x: W - 200, y: H / 2, vx: 4000, vy: 0, rot: 0, angVel: 0 });
+    run(pet, 2, (p) => p.side === 'right' && p.grounded && p.mode !== 'cling');
+    expect(pet.side).toBe('right');
+    pet.cue('sign');
+    run(pet, 10, (p) => p.mode === 'sign');
+    expect(pet.mode).toBe('sign');
+    expect(pet.side).toBe('floor');
+  });
+
+  it('被拎着的时候先记下，落地站稳再做', () => {
+    const pet = makePet();
+    pet.placeOnFloor(800);
+    pet.grab(800, pet.pos.y);
+    pet.cue('stretch');
+    expect(pet.mode).toBe('held');
+    pet.release(0, 0, false);
+    run(pet, 4, (p) => p.mode === 'stretch');
+    expect(pet.mode).toBe('stretch');
+    expect(pet.pendingCue).toBeNull();
+  });
+});
+
+describe('等人回应', () => {
+  it('头顶有气泡时原地发呆，不自己溜达', () => {
+    const pet = makePet({ idleMin: 0.1, idleMax: 0.1 });
+    pet.placeOnFloor(800);
+    pet.attentive = true;
+    run(pet, 10);
+    expect(pet.mode).toBe('idle');
+    expect(pet.pos.x).toBe(800);
+    pet.attentive = false;
+    run(pet, 1);
+    expect(pet.mode).not.toBe('idle');
+  });
+});

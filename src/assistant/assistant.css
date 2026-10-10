@@ -1,0 +1,304 @@
+:root {
+  --bg: #faf9f5;
+  --panel: #f0eee6;
+  --text: #141413;
+  --muted: #6b6a65;
+  --border: #dedbd0;
+  --accent: #d77757;
+  --ok: #1f9d5b;
+  --err: #c2410c;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1f1e1d;
+    --panel: #2a2927;
+    --text: #f4f1ea;
+    --muted: #a3a097;
+    --border: #3b3a37;
+    --ok: #4ade80;
+    --err: #fb923c;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, 'Microsoft YaHei UI', sans-serif;
+}
+main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px 16px;
+}
+h2 {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+h2:first-child {
+  margin-top: 4px;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 10px 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.tabs button {
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: none;
+  color: var(--muted);
+  margin-bottom: -1px;
+}
+.tabs button[aria-selected='true'] {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+  font-weight: 600;
+}
+
+button,
+select,
+input {
+  font: inherit;
+  color: var(--text);
+}
+button,
+select {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+}
+button:hover {
+  border-color: var(--muted);
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+input[type='text'],
+input[type='url'],
+input[type='number'],
+input[type='datetime-local'] {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  min-width: 0;
+}
+input[type='number'] {
+  width: 64px;
+}
+input[type='checkbox'] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+}
+
+.add-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.add-row input[type='text'],
+.add-row input[type='url'] {
+  flex: 1;
+}
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.list li:last-child {
+  border-bottom: 0;
+}
+.list .grow {
+  flex: 1;
+  min-width: 0;
+}
+.list .todo-text {
+  width: 100%;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+}
+.list .todo-text:hover,
+.list .todo-text:focus {
+  border-color: var(--border);
+}
+.done .todo-text {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.due {
+  flex: none;
+  max-width: 170px;
+  font-size: 12px;
+}
+.due.overdue {
+  color: var(--err);
+}
+/* 没设截止时间的框淡一点，鼠标移上去才看清 */
+.list .due.unset {
+  opacity: 0.4;
+}
+.list li:hover .due.unset,
+.list .due.unset:focus {
+  opacity: 1;
+}
+.icon-btn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+}
+.icon-btn:hover {
+  color: var(--err);
+  border-color: var(--border);
+}
+
+.done-box {
+  margin-top: 12px;
+}
+.done-box summary {
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 0;
+}
+.done-box #clearDone {
+  margin-top: 6px;
+}
+
+.source-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.source-target {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.source-status {
+  font-size: 12px;
+}
+.source-status.ok {
+  color: var(--ok);
+}
+.source-status.err {
+  color: var(--err);
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings label > span:first-child {
+  min-width: 130px;
+  color: var(--muted);
+}
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.day {
+  margin: 10px 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.event {
+  display: flex;
+  gap: 10px;
+  padding: 4px 0;
+}
+.event time {
+  flex: none;
+  width: 92px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.event .where {
+  color: var(--muted);
+}
+
+.empty,
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 6px 0;
+}
+.note {
+  min-height: 0;
+  padding: 0 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.note:not(:empty) {
+  padding: 6px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+[hidden] {
+  display: none !important;
+}

@@ -11,6 +11,8 @@ use tauri::{
 };
 
 #[cfg(windows)]
+mod assist;
+#[cfg(windows)]
 mod desktop;
 #[cfg(windows)]
 mod input;
@@ -23,7 +25,7 @@ mod watcher {
     pub const OVERLAY: &str = "overlay";
     #[derive(Default)]
     pub struct DeskState {
-        pub hit: Option<[f64; 4]>,
+        pub hits: Vec<[f64; 4]>,
         pub dragging: bool,
         pub carrier: Option<isize>,
         pub manual_hidden: bool,
@@ -33,9 +35,26 @@ mod watcher {
     pub type Shared = Arc<Mutex<DeskState>>;
 }
 
+#[cfg(not(windows))]
+mod assist {
+    pub fn idle_ms() -> u64 {
+        0
+    }
+    pub fn http_get(_url: &str) -> Result<String, String> {
+        Err("unsupported platform".into())
+    }
+    pub fn decode_text(bytes: Vec<u8>) -> String {
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+    pub fn pick_ics(_owner: Option<isize>, _title: String, _filter: String) -> Option<String> {
+        None
+    }
+}
+
 use watcher::{DeskState, Shared, OVERLAY};
 
 const DEBUG: &str = "debug";
+const ASSISTANT: &str = "assistant";
 
 /// 覆盖层：铺满主屏的工作区（不含任务栏）。
 /// 故意不等于整块屏幕，避免被系统当成全屏程序（压住任务栏、吞掉通知）。
@@ -88,6 +107,10 @@ fn create_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
 struct Texts {
     debug_title: &'static str,
     debug: &'static str,
+    assistant_title: &'static str,
+    assistant: &'static str,
+    pick_ics: &'static str,
+    ics_filter: &'static str,
     /// 下面三个里的 {name} 换成当前形象的名字
     reset: &'static str,
     hide: &'static str,
@@ -104,6 +127,10 @@ struct Texts {
 const ZH: Texts = Texts {
     debug_title: "Clawd 调教面板",
     debug: "调教面板",
+    assistant_title: "Clawd 小助手",
+    assistant: "小助手（待办 / 日历 / 提醒）",
+    pick_ics: "选择日历文件",
+    ics_filter: "iCalendar 日历 (*.ics)",
     reset: "把 {name} 叫回来",
     hide: "隐藏 {name}",
     show: "显示 {name}",
@@ -118,6 +145,10 @@ const ZH: Texts = Texts {
 const EN: Texts = Texts {
     debug_title: "Clawd Tuning Panel",
     debug: "Tuning panel",
+    assistant_title: "Clawd Assistant",
+    assistant: "Assistant (to-dos / calendar / reminders)",
+    pick_ics: "Choose a calendar file",
+    ics_filter: "iCalendar (*.ics)",
     reset: "Bring {name} back",
     hide: "Hide {name}",
     show: "Show {name}",
@@ -165,14 +196,29 @@ fn show_debug(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn tuning_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    Ok(dir.join("tuning.json"))
+fn show_assistant(app: &AppHandle) -> tauri::Result<()> {
+    if let Some(w) = app.get_webview_window(ASSISTANT) {
+        w.unminimize()?;
+        w.show()?;
+        w.set_focus()?;
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(app, ASSISTANT, WebviewUrl::App("assistant.html".into()))
+        .title(texts().assistant_title)
+        .inner_size(480.0, 680.0)
+        .min_inner_size(380.0, 420.0)
+        .build()?;
+    Ok(())
 }
 
-#[tauri::command]
-fn load_tuning(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
-    let path = tuning_path(&app)?;
+/// 配置目录（%APPDATA%\com.physicsclawdpet.desktop）里的一个 JSON 文件
+fn config_path(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    Ok(dir.join(name))
+}
+
+fn load_json(app: &AppHandle, name: &str) -> Result<Option<serde_json::Value>, String> {
+    let path = config_path(app, name)?;
     if !path.exists() {
         return Ok(None);
     }
@@ -180,29 +226,96 @@ fn load_tuning(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
     serde_json::from_str(&text).map(Some).map_err(|e| e.to_string())
 }
 
-/// 返回保存的路径，调教面板会显示出来方便找到文件。
-#[tauri::command]
-fn save_tuning(app: AppHandle, tuning: serde_json::Value) -> Result<String, String> {
-    let path = tuning_path(&app)?;
+/// 先写临时文件再改名：写到一半退出也不会把原来的文件弄坏
+fn save_json(app: &AppHandle, name: &str, value: &serde_json::Value) -> Result<PathBuf, String> {
+    let path = config_path(app, name)?;
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
-    let text = serde_json::to_string_pretty(&tuning).map_err(|e| e.to_string())?;
-    fs::write(&path, text).map_err(|e| e.to_string())?;
-    Ok(path.display().to_string())
+    let text = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, text).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
+    Ok(path)
 }
 
 #[tauri::command]
-fn open_debug(app: AppHandle) -> Result<(), String> {
+fn load_tuning(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
+    load_json(&app, "tuning.json")
+}
+
+/// 返回保存的路径，调教面板会显示出来方便找到文件。
+#[tauri::command]
+fn save_tuning(app: AppHandle, tuning: serde_json::Value) -> Result<String, String> {
+    save_json(&app, "tuning.json", &tuning).map(|p| p.display().to_string())
+}
+
+// ---------- 小助手 ----------
+
+#[tauri::command]
+fn load_assistant(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
+    load_json(&app, "assistant.json")
+}
+
+/// 保存后广播给所有窗口（覆盖层跑提醒、小助手窗口显示）
+#[tauri::command]
+fn save_assistant(app: AppHandle, data: serde_json::Value) -> Result<(), String> {
+    save_json(&app, "assistant.json", &data)?;
+    app.emit("assistant-data", data).map_err(|e| e.to_string())
+}
+
+/// 同 open_debug，必须是 async
+#[tauri::command]
+async fn open_assistant(app: AppHandle) -> Result<(), String> {
+    show_assistant(&app).map_err(|e| e.to_string())
+}
+
+/// 距离上一次键盘/鼠标操作多少毫秒
+#[tauri::command]
+fn desk_idle_ms() -> u64 {
+    assist::idle_ms()
+}
+
+/// 下载日历订阅（网页里直接 fetch 会被跨域拦住）
+#[tauri::command]
+async fn fetch_text(url: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || assist::http_get(&url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    fs::read(&path).map(assist::decode_text).map_err(|e| e.to_string())
+}
+
+/// 选一个本地 .ics 文件，取消返回 None
+#[tauri::command]
+async fn pick_ics_file(app: AppHandle) -> Option<String> {
+    let owner = app
+        .get_webview_window(ASSISTANT)
+        .and_then(|w| w.hwnd().ok())
+        .map(|h| h.0 as isize);
+    let t = texts();
+    let (title, filter) = (t.pick_ics.to_string(), t.ics_filter.to_string());
+    tauri::async_runtime::spawn_blocking(move || assist::pick_ics(owner, title, filter))
+        .await
+        .ok()
+        .flatten()
+}
+
+/// 在命令里建窗口必须是 async：同步命令跑在主线程上，Windows 下建 WebView 会死锁（wry#583）
+#[tauri::command]
+async fn open_debug(app: AppHandle) -> Result<(), String> {
     show_debug(&app).map_err(|e| e.to_string())
 }
 
 // ---------- 覆盖层 → 观察线程 ----------
 
-/// 宠物的可点击区域（覆盖层 CSS 像素），None 表示没有
+/// 可点击区域（覆盖层 CSS 像素）：第一个是宠物，后面是气泡之类；空表示没有
 #[tauri::command]
-fn desk_set_hit(state: State<Shared>, rect: Option<[f64; 4]>) {
-    state.lock().unwrap().hit = rect;
+fn desk_set_hits(state: State<Shared>, rects: Vec<[f64; 4]>) {
+    state.lock().unwrap().hits = rects;
 }
 
 #[tauri::command]
@@ -286,6 +399,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let t = texts();
     // 形象列表和带名字的菜单文字等覆盖层加载好后由 tray_set_skins 填上
     let name = "Clawd";
+    let assistant = MenuItem::with_id(app, "assistant", t.assistant, true, None::<&str>)?;
     let debug = MenuItem::with_id(app, "debug", t.debug, true, None::<&str>)?;
     let reset = MenuItem::with_id(app, "reset", t.reset.replace("{name}", name), true, None::<&str>)?;
     let hide = MenuItem::with_id(app, "hide", t.hide.replace("{name}", name), true, None::<&str>)?;
@@ -299,7 +413,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     }
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", t.quit, true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&debug, &reset, &hide, &skins, &size, &sep, &quit])?;
+    let menu = Menu::with_items(app, &[&assistant, &debug, &reset, &hide, &skins, &size, &sep, &quit])?;
     app.manage(TrayItems {
         reset,
         hide,
@@ -312,6 +426,9 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
+            "assistant" => {
+                let _ = show_assistant(app);
+            }
             "debug" => {
                 let _ = show_debug(app);
             }
@@ -369,11 +486,18 @@ pub fn run() {
             load_tuning,
             save_tuning,
             open_debug,
-            desk_set_hit,
+            desk_set_hits,
             desk_set_dragging,
             desk_set_carrier,
             desk_ready,
-            tray_set_skins
+            tray_set_skins,
+            load_assistant,
+            save_assistant,
+            open_assistant,
+            desk_idle_ms,
+            fetch_text,
+            read_text_file,
+            pick_ics_file
         ])
         .setup(|app| {
             let handle = app.handle();

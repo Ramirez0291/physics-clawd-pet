@@ -3,7 +3,7 @@
 
 import { type Skin, parseHex } from '../skin/types';
 import { type Affine, type Vec2, clamp, mul, rotate, scale, squashAlong, translate } from './math';
-import { COIN_BITES, NORMAL, type Pet, STOCK_LEN } from './pet';
+import { CHIME_GAP, CHIME_LEAD, COIN_BITES, NORMAL, type Pet, STOCK_LEN, STRETCH_RELEASE } from './pet';
 
 /** 单个部件的局部变换（格子单位），缩放以部件中心为锚 */
 export interface PartPose {
@@ -97,6 +97,12 @@ const C = {
   coinMark: parseHex('#d9922b'),
   spark: parseHex('#fffbe6'),
   blush: parseHex('#ff9d8f'),
+  clapper: parseHex('#5a3d08'),
+  paper: parseHex('#faf9f5'),
+  ink: parseHex('#26272e'),
+  faint: parseHex('#b8b4aa'),
+  red: parseHex('#e5534b'),
+  check: parseHex('#2fbf71'),
 };
 
 /** 电脑翻开的程度：开头翻开、结尾合上，各 0.45 秒 */
@@ -268,6 +274,61 @@ function coinProps(pet: Pet, skin: Skin, out: Prop[]) {
       [0, 1],
     ]) {
       out.push({ x: (sx + dx) * PX, y: (sy + dy) * PX, w: PX, h: PX, rgba: C.spark, torso: true });
+    }
+  }
+}
+
+/** 铃铛：7×7 格，一格 = 2 道具像素 */
+const BELL_ART = ['...o...', '..oyo..', '.oyhyo.', '.oyhyo.', 'oyyyyyo', 'ooooooo', '...s...'];
+
+/** 报时：铃铛举在 dir 那只手上方，每摇一下往另一边甩一下 */
+function bellProps(pet: Pet, skin: Skin, raise: number, out: Prop[]) {
+  if (raise < 0.3) return;
+  const [gw] = skin.grid;
+  const arm = skin.parts.find((p) => p.role === 'arm' && p.side === pet.dir);
+  const handX = arm ? arm.rect[0] + arm.rect[2] / 2 : gw / 2;
+  const handTop = (arm ? arm.rect[1] : skin.bodyBox.y) - 3 * raise;
+  const since = pet.bites > 0 ? pet.modeTime - (CHIME_LEAD + (pet.bites - 1) * CHIME_GAP) : 1;
+  const swing = pet.bites > 0 && since < CHIME_GAP * 0.7 ? (pet.bites % 2 ? 1 : -1) : 0;
+  const x0 = Math.round((handX - 7 / 3) * 3) + swing * 2;
+  const y0 = Math.round((handTop - 14 / 3 + 0.3) * 3);
+  const color: Record<string, number> = { o: C.coinRim, y: C.coin, h: C.coinHi, s: C.clapper };
+  BELL_ART.forEach((line, r) =>
+    [...line].forEach((ch, c) => {
+      if (ch === '.') return;
+      // 铃舌往反方向荡
+      const dx = ch === 's' ? -swing * 2 : 0;
+      out.push({ x: (x0 + c * 2 + dx) * PX, y: (y0 + r * 2) * PX, w: 2 * PX, h: 2 * PX, rgba: color[ch], torso: true });
+    }),
+  );
+}
+
+/** 举牌子：头顶一块 26×17 道具像素的牌子，下面一根杆；牌子上是日历页或者待办清单 */
+function signProps(pet: Pet, skin: Skin, out: Prop[]) {
+  const [gw] = skin.grid;
+  const k = smoothstep(pet.modeTime / 0.3);
+  const bob = Math.sin(pet.t * 4) > 0.3 ? 1 : 0;
+  const x0 = Math.round(gw * 1.5) - 13;
+  const y0 = Math.round(skin.bodyBox.y * 3) - 23 + Math.round((1 - k) * 10) - bob;
+  const add = (x: number, y: number, w: number, h: number, rgba: number) =>
+    out.push({ x: (x0 + x) * PX, y: (y0 + y) * PX, w: w * PX, h: h * PX, rgba, torso: true });
+  add(12, 17, 2, 6, C.shellDark);
+  add(0, 0, 26, 17, C.ink);
+  add(1, 1, 24, 15, C.paper);
+  if (pet.signKind === 'event') {
+    // 日历页：红色页眉、两个装订环、日期格子，今天那格是红的
+    add(1, 1, 24, 4, C.red);
+    add(6, -1, 2, 4, C.ink);
+    add(18, -1, 2, 4, C.ink);
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 5; c++) add(3 + c * 4, 7 + r * 3, 3, 2, r === 1 && c === 3 ? C.red : C.faint);
+    }
+  } else {
+    // 待办清单：三个勾选框，第一个打了勾
+    for (let r = 0; r < 3; r++) {
+      const y = 2 + r * 5;
+      add(3, y, 3, 3, r === 0 ? C.check : C.faint);
+      add(8, y + 1, r === 2 ? 9 : 14, 1, C.faint);
     }
   }
 }
@@ -509,6 +570,54 @@ export function computePose(pet: Pet, skin: Skin): Pose {
       });
       if (env > 0.3) eyeSquint = 0.25;
       eyeLookScale = 0;
+      break;
+    }
+    case 'chime': {
+      // 一只手把铃铛举过头顶，另一只叉腰；摇一下身子跟着一缩（缩的部分在引擎的果冻弹簧里）
+      const raise = smoothstep(pet.modeTime / CHIME_LEAD) * (1 - smoothstep((p - 0.9) / 0.1));
+      each((pp, part) => {
+        if (part.role !== 'arm') return;
+        if (part.side === pet.dir) pp.dy = -3 * raise;
+        else pp.dy = 0.5 * raise;
+      });
+      look = { x: pet.dir * 0.4, y: -1 };
+      const since = pet.bites > 0 ? pet.modeTime - (CHIME_LEAD + (pet.bites - 1) * CHIME_GAP) : 1;
+      if (since < 0.15) eyeSquint = 0.25;
+      bellProps(pet, skin, raise, props);
+      break;
+    }
+    case 'stretch': {
+      // 伸懒腰：慢慢伸长、双手举过头顶、闭眼抖一抖，然后一松劲
+      const tm = pet.modeTime;
+      const k = smoothstep(tm / 0.8) * (1 - smoothstep((tm - STRETCH_RELEASE) / 0.25));
+      torso.sy = 1 + 0.18 * k;
+      torso.sx = 1 - 0.06 * k;
+      if (tm > 0.8 && tm < STRETCH_RELEASE) torso.dx = Math.sin(t * 30) * 0.15;
+      each((pp, part) => {
+        if (part.role === 'arm') {
+          pp.dy = -3.5 * k;
+          pp.dx = -part.side * 0.5 * k;
+        }
+      });
+      if (k > 0.4) eyeSquint = 0.25;
+      eyeLookScale = 1 - k;
+      // 松劲之后满足地眯一会儿
+      if (tm > STRETCH_RELEASE + 0.25) eyeSquint = blinking(t) ? 0.25 : 0.6;
+      break;
+    }
+    case 'sign': {
+      // 双手把牌子举过头顶，一颠一颠的
+      const k = smoothstep(pet.modeTime / 0.3);
+      each((pp, part, i) => {
+        if (part.role === 'arm') {
+          pp.dy = -2.5 * k;
+          pp.dx = -part.side * 0.5 * k;
+        } else if (part.role === 'leg') {
+          pp.dy = Math.sin(t * 8 + i * Math.PI) > 0.5 ? -0.5 : 0;
+        }
+      });
+      eyeSquint = blinking(t) ? 0.25 : 1.25;
+      signProps(pet, skin, props);
       break;
     }
   }

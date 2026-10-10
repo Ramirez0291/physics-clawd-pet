@@ -39,7 +39,10 @@ export type Mode =
   | 'laptop' // 掏出笔记本敲代码
   | 'stocks' // 掏出笔记本炒股
   | 'coin' // 掏出 token 金币吃掉
-  | 'shake'; // 抖毛（毛茸茸的皮肤专属）
+  | 'shake' // 抖毛（毛茸茸的皮肤专属）
+  | 'chime' // 整点报时：举着铃铛摇，几点摇几下
+  | 'stretch' // 提醒休息：伸个大懒腰
+  | 'sign'; // 日程/待办：跑到屏幕中间举牌子
 
 /** 发呆时会随机做的小动作。皮肤在 skin.json 的 actions 里挑自己会做哪些。 */
 export type Activity = 'laptop' | 'stocks' | 'coin' | 'shake';
@@ -59,6 +62,22 @@ export const COIN_TIME = 3.3;
 export const COIN_BITES = [1.35, 1.8, 2.25];
 /** 股价历史长度（= 屏幕上的 K 线列数） */
 export const STOCK_LEN = 20;
+
+/** 提醒动作（小助手触发的，任何皮肤都会） */
+export type Cue = 'chime' | 'stretch' | 'sign';
+export const CUES: readonly Cue[] = ['chime', 'stretch', 'sign'];
+/** 举的牌子上画什么：日历 / 待办清单 */
+export type SignKind = 'event' | 'todo';
+/** 报时：举起铃铛的时间，以及每一下的间隔（秒） */
+export const CHIME_LEAD = 0.5;
+export const CHIME_GAP = 0.45;
+/** 伸懒腰：总时长，以及松劲的时刻 */
+export const STRETCH_TIME = 3.2;
+export const STRETCH_RELEASE = 2.3;
+/** 举牌子举多久 */
+export const SIGN_TIME = 6;
+/** 跑去屏幕中间最多跑这么久，到不了就原地举 */
+const SEEK_TIMEOUT = 8;
 
 export type ImpactTier = 'soft' | 'bounce' | 'roll' | 'hero' | 'splat' | 'wall' | 'cling';
 
@@ -81,7 +100,8 @@ export type PetEvent =
   | { type: 'dropped' }
   | { type: 'heart'; x: number; y: number; nx: number; ny: number }
   | { type: 'chomp'; x: number; y: number; nx: number; ny: number }
-  | { type: 'fluff'; x: number; y: number; nx: number; ny: number };
+  | { type: 'fluff'; x: number; y: number; nx: number; ny: number }
+  | { type: 'ding'; x: number; y: number; nx: number; ny: number };
 
 /** 一次投掷的初始条件，用于"重放上次投掷"做 A/B 对比 */
 export interface LaunchState {
@@ -122,11 +142,27 @@ const GROUNDED: ReadonlySet<Mode> = new Set([
   'stocks',
   'coin',
   'shake',
+  'chime',
+  'stretch',
+  'sign',
 ]);
 /** 这些状态下光标在头顶来回蹭就算摸摸 */
 const RUBBABLE: ReadonlySet<Mode> = new Set(['idle', 'walk', 'land', 'petted', 'laptop', 'stocks', 'coin', 'shake']);
 /** 这些状态下挡住输入框会主动让开 */
-const AVOIDING: ReadonlySet<Mode> = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin', 'shake']);
+const AVOIDING: ReadonlySet<Mode> = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin', 'shake', 'chime', 'stretch', 'sign']);
+/** 这些状态可以马上被提醒动作打断；其他状态（飞着、被拎着、落地硬直）等站稳了再做 */
+const CUEABLE: ReadonlySet<Mode> = new Set([
+  'idle',
+  'walk',
+  'petted',
+  'laptop',
+  'stocks',
+  'coin',
+  'shake',
+  'chime',
+  'stretch',
+  'sign',
+]);
 
 interface Hold {
   /** 抓取点相对身体中心的偏移（宠物本地坐标、未旋转，单位 px） */
@@ -203,8 +239,18 @@ export class Pet {
   /** 心情：>0 刚涨了，<0 刚跌了 */
   stockMood = 0;
   private stockTick = 0;
-  /** 吃TOKEN：已经咬了几口 */
+  /** 吃TOKEN：已经咬了几口；报时：已经摇了几下 */
   bites = 0;
+  /** 报时：一共要摇几下 */
+  chimes = 0;
+  signKind: SignKind = 'event';
+  /** 等着做的提醒动作（被拎着、在天上飞的时候先记下，站稳了再做） */
+  pendingCue: { kind: Cue; count: number; sign: SignKind } | null = null;
+  /** 正跑去屏幕中间举牌子 */
+  seeking = false;
+  /** 头顶有提醒气泡等人回应：待在原地，不自己溜达、玩电脑、跳窗口 */
+  attentive = false;
+  private seekTime = 0;
   /** 摸摸：光标在头顶的移动记录 */
   private rub = { x: NaN, y: NaN, dir: 0, flips: [] as number[], lastAt: -Infinity, heart: 0 };
 
@@ -361,6 +407,59 @@ export class Pet {
       return true;
     }
     return this.startActivity(m);
+  }
+
+  /**
+   * 小助手的提醒动作。count：报时摇几下；sign：牌子上画什么。
+   * 正在忙别的小动作会被打断；飞着、被拎着时先记下，站稳了再做。
+   */
+  cue(kind: Cue, opts: { count?: number; sign?: SignKind } = {}) {
+    this.pendingCue = { kind, count: Math.max(1, Math.min(12, opts.count ?? 3)), sign: opts.sign ?? 'event' };
+    this.seekTime = 0;
+    if (CUEABLE.has(this.mode) && !this.fleeing) this.startCue();
+  }
+
+  /** 尝试开始等着的提醒动作（举牌子要先跑到地方）。返回 true 表示这一步已经处理了 */
+  private startCue(): boolean {
+    const c = this.pendingCue;
+    if (!c) return false;
+    if (c.kind !== 'sign') {
+      this.pendingCue = null;
+      this.bites = 0;
+      this.chimes = c.count;
+      const duration = c.kind === 'chime' ? CHIME_LEAD + c.count * CHIME_GAP + 0.6 : STRETCH_TIME;
+      this.setMode(c.kind, duration);
+      return true;
+    }
+    if (this.seekTime > SEEK_TIMEOUT && this.side !== 'floor') {
+      // 怎么都下不来（比如一直在躲输入框）：算了
+      this.pendingCue = null;
+      return false;
+    }
+    if (this.side !== 'floor') {
+      // 在墙上/天花板上：先跳下来
+      this.leaveSurface();
+      return true;
+    }
+    const target = (this.bounds.left + this.bounds.right) / 2;
+    const [lo, hi] = this.sRange('floor');
+    const goal = this.support ? target : clamp(target, lo, hi);
+    if (Math.abs(this.pos.x - goal) <= this.halfW * 0.5 || this.seekTime > SEEK_TIMEOUT) {
+      this.pendingCue = null;
+      this.seeking = false;
+      this.signKind = c.sign;
+      this.setMode('sign', SIGN_TIME);
+      this.emote = { kind: '!', t: 0 };
+      this.squashAngle = -Math.PI / 2;
+      this.squash = Math.min(this.squash, -0.15);
+      return true;
+    }
+    if (this.mode !== 'walk' || !this.seeking) {
+      this.setMode('walk', 30);
+      this.seeking = true;
+    }
+    this.dir = goal > this.pos.x ? 1 : -1;
+    return false;
   }
 
   private loseSupport() {
@@ -579,6 +678,11 @@ export class Pet {
       case 'shake':
         this.stepActivity(dt);
         break;
+      case 'chime':
+      case 'stretch':
+      case 'sign':
+        this.stepCue();
+        break;
       default:
         this.stepRecover();
     }
@@ -589,7 +693,10 @@ export class Pet {
     this.modeTime = 0;
     this.modeDuration = duration;
     if (m === 'air' || m === 'held') this.support = null;
-    if (m !== 'walk') this.fleeing = false;
+    if (m !== 'walk') {
+      this.fleeing = false;
+      this.seeking = false;
+    }
   }
 
   /**
@@ -937,6 +1044,10 @@ export class Pet {
   private stepSurface(dt: number) {
     const T = this.tuning;
     this.surfaceTime += dt;
+    if (this.pendingCue && !this.fleeing) {
+      this.seekTime += dt;
+      if (this.startCue()) return;
+    }
     if (this.side !== 'floor' && this.surfaceTime >= this.surfaceStay) {
       // 正下方就是输入框：先别跳，在墙上多待一会儿
       if (this.fleeing || this.blocksInput(this.pos.x, this.bounds.bottom - this.halfH)) {
@@ -948,7 +1059,8 @@ export class Pet {
     }
 
     if (this.mode === 'walk') {
-      const speed = (this.side === 'floor' ? T.walkSpeed : T.climbSpeed) * (this.fleeing ? T.fleeSpeedMul : 1);
+      const hurry = this.fleeing || this.seeking;
+      const speed = (this.side === 'floor' ? T.walkSpeed : T.climbSpeed) * (hurry ? T.fleeSpeedMul : 1);
       const [lo, hi] = this.sRange(this.side);
       const s = this.sOf(this.side) + this.dir * speed * dt;
       const next = this.surfacePos(this.side, clamp(s, lo, hi));
@@ -962,8 +1074,8 @@ export class Pet {
         // 前面是输入框：当成墙，掉头
         this.dir = -this.dir as 1 | -1;
       } else if (sup && (s <= sup.x0 || s >= sup.x1)) {
-        // 走到窗口边缘：跳下去或者掉头（在让路就一定跳）
-        if (this.fleeing || this.rng() < T.stepOffChance) {
+        // 走到窗口边缘：跳下去或者掉头（在让路、赶去举牌子就一定跳）
+        if (hurry || this.rng() < T.stepOffChance) {
           this.setMode('air');
           this.vel = { x: this.dir * T.walkSpeed * 2, y: -260 };
           this.events.push({ type: 'leap' });
@@ -979,8 +1091,10 @@ export class Pet {
     }
 
     if (this.modeTime >= this.modeDuration) {
-      if (this.fleeing) {
+      if (this.fleeing || this.seeking) {
         // 让路的路程很长，时间到了也接着走
+        this.modeDuration += 1;
+      } else if (this.mode === 'idle' && this.attentive) {
         this.modeDuration += 1;
       } else if (this.mode === 'idle' && this.dizzy <= 0) {
         if (this.side === 'floor' && this.rng() < T.platformJumpChance && this.jumpToPlatform()) return;
@@ -1229,6 +1343,37 @@ export class Pet {
     if (this.modeTime < this.modeDuration) return;
     if (this.mode === 'stocks' && this.stock[this.stock.length - 1] > this.stock[0]) this.taDa = 0.8;
     this.setMode('idle', rand(T.idleMin, T.idleMax, this.rng));
+  }
+
+  private stepCue() {
+    const n = NORMAL[this.side];
+    if (this.mode === 'chime') {
+      while (this.bites < this.chimes && this.modeTime >= CHIME_LEAD + this.bites * CHIME_GAP) {
+        this.bites++;
+        // 当~：身体一缩，铃铛那边冒出音符
+        this.squashAngle = Math.atan2(n.y, n.x);
+        this.squash = Math.max(this.squash, 0.12);
+        this.squashVel = 0;
+        const t = { x: -n.y, y: n.x };
+        const r = this.halfH * 1.3;
+        this.events.push({
+          type: 'ding',
+          x: this.pos.x + n.x * r + t.x * this.dir * this.halfW * 0.6,
+          y: this.pos.y + n.y * r + t.y * this.dir * this.halfW * 0.6,
+          nx: n.x,
+          ny: n.y,
+        });
+      }
+    } else if (this.mode === 'stretch' && this.bites === 0 && this.modeTime >= STRETCH_RELEASE) {
+      // 伸完一松劲：整个人往下一沉
+      this.bites = 1;
+      this.squashAngle = Math.atan2(n.y, n.x);
+      this.squash = Math.max(this.squash, 0.2);
+      this.squashVel = 0;
+    }
+    if (this.modeTime < this.modeDuration) return;
+    if (this.mode === 'sign') this.taDa = 0.6;
+    this.setMode('idle', rand(this.tuning.idleMin, this.tuning.idleMax, this.rng));
   }
 
   /** 行情：带一点点上涨倾向的随机游走，偶尔暴涨暴跌 */

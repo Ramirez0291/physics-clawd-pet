@@ -1,7 +1,7 @@
 import { rand } from './math';
 import type { ImpactTier, PetEvent } from './pet';
 
-export type ParticleKind = 'dust' | 'debris' | 'shock' | 'heart' | 'fluff';
+export type ParticleKind = 'dust' | 'debris' | 'shock' | 'heart' | 'fluff' | 'note';
 
 export interface Particle {
   kind: ParticleKind;
@@ -27,6 +27,7 @@ const DUST = ['#e9e1d5', '#9b8f82'];
 const DEBRIS = '#b45f43';
 const HEART = '#ff6b8a';
 const GOLD = ['#f5c542', '#b07d12', '#fff4b8'];
+const NOTE = ['#f5c542', '#79c0ff', '#ff9d8f'];
 
 const DUST_COUNT: Record<ImpactTier, number> = {
   soft: 3,
@@ -57,6 +58,27 @@ export class ParticleSystem {
     else if (ev.type === 'heart') this.heart(ev.x, ev.y, ev.nx, ev.ny);
     else if (ev.type === 'chomp') this.chomp(ev.x, ev.y, ev.nx, ev.ny);
     else if (ev.type === 'fluff') this.fluff(ev.x, ev.y, ev.nx, ev.ny);
+    else if (ev.type === 'ding') this.ding(ev.x, ev.y, ev.nx, ev.ny);
+  }
+
+  /** 摇铃：一个音符飘起来，晃晃悠悠往外走 */
+  private ding(x: number, y: number, nx: number, ny: number) {
+    const r = this.rng;
+    const side = r() < 0.5 ? 1 : -1;
+    const life = rand(0.9, 1.3, r);
+    this.push({
+      kind: 'note',
+      x,
+      y,
+      vx: -ny * side * rand(40, 90, r) + nx * rand(60, 100, r),
+      vy: nx * side * rand(40, 90, r) + ny * rand(60, 100, r),
+      life,
+      maxLife: life,
+      size: 1,
+      color: NOTE[Math.floor(r() * NOTE.length)],
+      drag: 1.5,
+      gravity: 0,
+    });
   }
 
   /** 抖毛：几撮毛往两边甩出去，轻飘飘地落下 */
