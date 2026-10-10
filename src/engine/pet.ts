@@ -8,7 +8,7 @@ import {
   rand,
   wrapAngle,
 } from './math';
-import type { Tuning } from './params';
+import { type Tuning, cellSize } from './params';
 
 /**
  * 宠物贴着的面：屏幕边框的四条边。站在其他窗口顶上时也是 'floor'，
@@ -31,7 +31,7 @@ export type Mode =
   | 'held' // 被鼠标拎着
   | 'air' // 飞行中
   | 'land' // 普通落地硬直
-  | 'roll' // 成龙式翻滚
+  | 'roll' // 翻滚
   | 'hero' // 超级英雄落地
   | 'splat' // 脸着地
   | 'cling' // 蜘蛛侠式贴墙/天花板的瞬间
@@ -42,7 +42,7 @@ export type Mode =
 
 /** 玩电脑类的小动作（电脑摆在 dir 那一侧的地上） */
 export const LAPTOP_MODES: ReadonlySet<Mode> = new Set(['laptop', 'stocks']);
-/** 吃金币的时间轴（秒）：掏出 → 举起欣赏 → 三口吃掉 → 回味 */
+/** 吃TOKEN的时间轴（秒）：掏出 → 举起欣赏 → 三口吃掉 → 回味 */
 export const COIN_TIME = 3.3;
 export const COIN_BITES = [1.35, 1.8, 2.25];
 /** 股价历史长度（= 屏幕上的 K 线列数） */
@@ -189,13 +189,15 @@ export class Pet {
   /** 心情：>0 刚涨了，<0 刚跌了 */
   stockMood = 0;
   private stockTick = 0;
-  /** 吃金币：已经咬了几口 */
+  /** 吃TOKEN：已经咬了几口 */
   bites = 0;
   /** 摸摸：光标在头顶的移动记录 */
   private rub = { x: NaN, y: NaN, dir: 0, flips: [] as number[], lastAt: -Infinity, heart: 0 };
 
   private hold: Hold | null = null;
   private rollDust = 0;
+  /** 设备像素比：决定实际画出来的格子大小 */
+  private pixelRatio = 1;
 
   constructor(
     public tuning: Tuning,
@@ -206,11 +208,15 @@ export class Pet {
 
   // ---------- 尺寸 ----------
 
+  /** 一个皮肤格子的边长（CSS 像素），与渲染器画出来的一致 */
+  get cell() {
+    return cellSize(this.tuning, this.pixelRatio);
+  }
   get halfW() {
-    return (this.grid[0] * this.tuning.petScale) / 2;
+    return (this.grid[0] * this.cell) / 2;
   }
   get halfH() {
-    return (this.grid[1] * this.tuning.petScale) / 2;
+    return (this.grid[1] * this.cell) / 2;
   }
   get rollRadius() {
     return this.halfH * 0.9;
@@ -233,9 +239,15 @@ export class Pet {
   }
 
   setTuning(t: Tuning) {
-    const sizeChanged = t.petScale !== this.tuning.petScale;
+    const before = this.cell;
     this.tuning = t;
-    if (sizeChanged) this.resnap();
+    if (this.cell !== before) this.resnap();
+  }
+
+  setPixelRatio(dpr: number) {
+    const before = this.cell;
+    this.pixelRatio = dpr;
+    if (this.cell !== before) this.resnap();
   }
 
   /** 窗口顶边列表刷新（约 10Hz）。脚下那段没了（窗口关了/被挡住）就掉下去。 */
@@ -1110,7 +1122,7 @@ export class Pet {
     }
   }
 
-  // ---------- 小动作：电脑、炒股、吃金币 ----------
+  // ---------- 小动作：电脑、炒股、吃TOKEN ----------
 
   /** 开始一个小动作。不指定就随机挑；电脑只能在地上（或窗口顶上）玩。 */
   private startActivity(want?: 'laptop' | 'stocks' | 'coin'): boolean {

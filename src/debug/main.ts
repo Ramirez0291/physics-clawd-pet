@@ -24,7 +24,7 @@ const MODE_NAMES: Record<string, string> = {
   petted: '被摸摸',
   laptop: '敲代码',
   stocks: '炒股',
-  coin: '吃金币',
+  coin: '吃TOKEN',
 };
 const SIDE_NAMES: Record<string, string> = { floor: '地面', ceiling: '天花板', left: '左墙', right: '右墙' };
 const TIER_NAMES: Record<string, string> = {

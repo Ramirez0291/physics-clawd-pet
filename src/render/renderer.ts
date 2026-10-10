@@ -1,5 +1,5 @@
 import { type Affine, apply, invert, mul, scale } from '../engine/math';
-import type { Tuning } from '../engine/params';
+import { type Tuning, cellSize, spritePixel } from '../engine/params';
 import type { ParticleSystem } from '../engine/particles';
 import type { Pet } from '../engine/pet';
 import { bodyTransform, computePose } from '../engine/pose';
@@ -149,9 +149,8 @@ export class Renderer {
   private rasterize(pet: Pet, T: Tuning): SpriteFrame {
     const skin = this.skin;
     const dpr = this.dpr;
-    const artRes = Math.max(1, Math.round(T.artRes));
-    const up = Math.max(1, Math.round((T.petScale * dpr) / artRes));
-    const unitCss = (up * artRes) / dpr;
+    const up = spritePixel(T, dpr);
+    const unitCss = cellSize(T, dpr);
     const pose = computePose(pet, skin);
     const m = mul(scale(dpr), bodyTransform(pet, unitCss));
 

@@ -84,6 +84,68 @@ fn create_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     Ok(win)
 }
 
+/// 托盘菜单和窗口标题的文字：系统界面语言是中文就用中文，否则英文
+struct Texts {
+    debug_title: &'static str,
+    debug: &'static str,
+    reset: &'static str,
+    hide: &'static str,
+    show: &'static str,
+    size: &'static str,
+    bigger: &'static str,
+    smaller: &'static str,
+    /// 与 SIZE_PRESETS 一一对应
+    presets: [&'static str; 4],
+    quit: &'static str,
+}
+
+const ZH: Texts = Texts {
+    debug_title: "Clawd 调教面板",
+    debug: "调教面板",
+    reset: "把 Clawd 叫回来",
+    hide: "隐藏 Clawd",
+    show: "显示 Clawd",
+    size: "大小",
+    bigger: "放大",
+    smaller: "缩小",
+    presets: ["小", "中（默认）", "大", "特大"],
+    quit: "退出",
+};
+
+const EN: Texts = Texts {
+    debug_title: "Clawd Tuning Panel",
+    debug: "Tuning panel",
+    reset: "Bring Clawd back",
+    hide: "Hide Clawd",
+    show: "Show Clawd",
+    size: "Size",
+    bigger: "Bigger",
+    smaller: "Smaller",
+    presets: ["Small", "Medium (default)", "Large", "Extra large"],
+    quit: "Quit",
+};
+
+#[cfg(windows)]
+fn system_is_chinese() -> bool {
+    // LANGID 的低 10 位是主语言；0x04 = LANG_CHINESE（简体、繁体都算）
+    let id = unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() };
+    id & 0x3ff == 0x04
+}
+
+#[cfg(not(windows))]
+fn system_is_chinese() -> bool {
+    std::env::var("LANG").is_ok_and(|l| l.starts_with("zh"))
+}
+
+fn texts() -> &'static Texts {
+    static LANG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *LANG.get_or_init(system_is_chinese) {
+        &ZH
+    } else {
+        &EN
+    }
+}
+
 fn show_debug(app: &AppHandle) -> tauri::Result<()> {
     if let Some(w) = app.get_webview_window(DEBUG) {
         w.unminimize()?;
@@ -92,7 +154,7 @@ fn show_debug(app: &AppHandle) -> tauri::Result<()> {
         return Ok(());
     }
     WebviewWindowBuilder::new(app, DEBUG, WebviewUrl::App("debug.html".into()))
-        .title("Clawd 调试面板")
+        .title(texts().debug_title)
         .inner_size(460.0, 860.0)
         .min_inner_size(360.0, 400.0)
         .build()?;
@@ -114,7 +176,7 @@ fn load_tuning(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
     serde_json::from_str(&text).map(Some).map_err(|e| e.to_string())
 }
 
-/// 返回保存的路径，调试面板会显示出来方便找到文件。
+/// 返回保存的路径，调教面板会显示出来方便找到文件。
 #[tauri::command]
 fn save_tuning(app: AppHandle, tuning: serde_json::Value) -> Result<String, String> {
     let path = tuning_path(&app)?;
@@ -160,22 +222,23 @@ fn desk_ready(state: State<Shared>) {
 
 struct HideItem(MenuItem<tauri::Wry>);
 
-/// 托盘"大小"菜单的预设（px/格），id 是 "size:<值>"
-const SIZE_PRESETS: [(&str, f64); 4] = [("小", 4.0), ("中（默认）", 6.0), ("大", 9.0), ("特大", 12.0)];
+/// 托盘"大小"菜单的预设（px/格），id 是 "size:<值>"；名字在 Texts::presets 里
+const SIZE_PRESETS: [f64; 4] = [4.0, 6.0, 9.0, 12.0];
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let debug = MenuItem::with_id(app, "debug", "调试面板", true, None::<&str>)?;
-    let reset = MenuItem::with_id(app, "reset", "把 Clawd 叫回来", true, None::<&str>)?;
-    let hide = MenuItem::with_id(app, "hide", "隐藏 Clawd", true, None::<&str>)?;
-    let size = Submenu::with_id(app, "size", "大小", true)?;
-    size.append(&MenuItem::with_id(app, "size+", "放大", true, None::<&str>)?)?;
-    size.append(&MenuItem::with_id(app, "size-", "缩小", true, None::<&str>)?)?;
+    let t = texts();
+    let debug = MenuItem::with_id(app, "debug", t.debug, true, None::<&str>)?;
+    let reset = MenuItem::with_id(app, "reset", t.reset, true, None::<&str>)?;
+    let hide = MenuItem::with_id(app, "hide", t.hide, true, None::<&str>)?;
+    let size = Submenu::with_id(app, "size", t.size, true)?;
+    size.append(&MenuItem::with_id(app, "size+", t.bigger, true, None::<&str>)?)?;
+    size.append(&MenuItem::with_id(app, "size-", t.smaller, true, None::<&str>)?)?;
     size.append(&PredefinedMenuItem::separator(app)?)?;
-    for (label, scale) in SIZE_PRESETS {
-        size.append(&MenuItem::with_id(app, format!("size:{scale}"), label, true, None::<&str>)?)?;
+    for (label, scale) in t.presets.iter().zip(SIZE_PRESETS) {
+        size.append(&MenuItem::with_id(app, format!("size:{scale}"), *label, true, None::<&str>)?)?;
     }
     let sep = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", t.quit, true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&debug, &reset, &hide, &size, &sep, &quit])?;
     app.manage(HideItem(hide));
 
@@ -198,7 +261,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                     s.manual_hidden
                 };
                 let item = &app.state::<HideItem>().0;
-                let _ = item.set_text(if hidden { "显示 Clawd" } else { "隐藏 Clawd" });
+                let _ = item.set_text(if hidden { texts().show } else { texts().hide });
             }
             "quit" => app.exit(0),
             // 覆盖层负责夹到范围内并保存
@@ -248,7 +311,7 @@ pub fn run() {
             let handle = app.handle();
             create_overlay(handle)?;
             build_tray(handle)?;
-            // 开发时直接打开调试面板，调手感最常用
+            // 开发时直接打开调教面板，调手感最常用
             #[cfg(debug_assertions)]
             show_debug(handle)?;
             Ok(())

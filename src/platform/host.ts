@@ -8,7 +8,7 @@ export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in
 
 type Handler = (payload: any) => void;
 
-/** 跨窗口消息总线（覆盖层 ↔ 调试面板） */
+/** 跨窗口消息总线（覆盖层 ↔ 调教面板） */
 export interface Bus {
   emit(event: string, payload?: unknown): void;
   on(event: string, handler: Handler): void;

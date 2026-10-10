@@ -305,7 +305,7 @@ export function computePose(pet: Pet, skin: Skin): Pose {
     }
     case 'walk': {
       const speed = pet.side === 'floor' ? pet.tuning.walkSpeed : pet.tuning.climbSpeed;
-      const phase = (t * speed) / (3 * pet.tuning.petScale);
+      const phase = (t * speed) / (3 * pet.cell);
       const bob = Math.sin(phase * Math.PI * 4) > 0 ? 0.5 : 0;
       torso.dy = -bob;
       each((pp, part) => {

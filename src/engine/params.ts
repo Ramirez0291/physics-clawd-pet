@@ -1,4 +1,4 @@
-// 所有"手感"参数集中在这里。调试面板根据 PARAM_DEFS 自动生成控件。
+// 所有"手感"参数集中在这里。调教面板根据 PARAM_DEFS 自动生成控件。
 // 长度单位：逻辑像素 (CSS px)；时间单位：秒；速度：px/s。
 
 export const DEFAULT_TUNING = {
@@ -108,6 +108,7 @@ export const DEFAULT_TUNING = {
   trailSpeed: 1400,
   particles: 1,
   hitPadding: 8,
+  wheelResize: 0,
   idleFps: 30,
 
   // 调试显示
@@ -176,7 +177,7 @@ export const PARAM_DEFS: ParamDef[] = [
   r('落地', 'bounceSpeed', '弹跳最低速度', 0, 3000, 10),
   r('落地', 'floorRestitution', '地面弹性', 0, 0.95, 0.01),
   r('落地', 'floorFriction', '弹跳水平保留', 0, 1, 0.01),
-  r('落地', 'rollSpeed', '翻滚最低水平速度', 100, 4000, 10, '成龙式翻滚'),
+  r('落地', 'rollSpeed', '翻滚最低水平速度', 100, 4000, 10, '翻滚'),
   r('落地', 'rollBias', '翻滚优先度', 0, 2, 0.05, '|vx| ≥ 冲击速度×此值时优先翻滚'),
   r('落地', 'rollFriction', '翻滚摩擦', 100, 6000, 50),
   r('落地', 'rollEndSpeed', '翻滚结束速度', 20, 800, 10),
@@ -228,7 +229,7 @@ export const PARAM_DEFS: ParamDef[] = [
   r('行为', 'climbChance', '走到墙角爬墙概率', 0, 1, 0.05),
   r('行为', 'ceilingChance', '爬到顶上天花板概率', 0, 1, 0.05),
 
-  r('小动作', 'activityChance', '发呆后做小动作概率', 0, 1, 0.05, '敲电脑、炒股、吃金币'),
+  r('小动作', 'activityChance', '发呆后做小动作概率', 0, 1, 0.05, '敲电脑、炒股、吃TOKEN'),
   r('小动作', 'laptopMin', '玩电脑最短(s)', 1, 60, 0.5),
   r('小动作', 'laptopMax', '玩电脑最长(s)', 1, 120, 0.5),
   r('小动作', 'rubFlips', '摸摸触发来回次数', 1, 8, 1, '1.5 秒内光标在头顶来回折返这么多次就算在摸它'),
@@ -243,11 +244,25 @@ export const PARAM_DEFS: ParamDef[] = [
   r('外观', 'trailSpeed', '残影触发速度', 200, 6000, 50),
   b('外观', 'particles', '粒子（烟尘/星星）'),
   r('外观', 'hitPadding', '可点击范围外扩', 0, 40, 1),
+  b('外观', 'wheelResize', '在宠物上滚滚轮调大小', '默认关掉：误碰滚轮会突然变得很大'),
   r('外观', 'idleFps', '平静时帧率', 5, 120, 1, '只在发呆/走路时降帧省电；一动起来就满帧'),
 
   b('调试显示', 'showHitbox', '显示碰撞盒/状态'),
   b('调试显示', 'showVelocity', '显示速度向量'),
 ];
+
+/**
+ * 一个精灵像素占多少设备像素。像素风渲染要求它是整数，所以 petScale 实际会被量化。
+ */
+export function spritePixel(T: Pick<Tuning, 'petScale' | 'artRes'>, dpr: number): number {
+  const artRes = Math.max(1, Math.round(T.artRes));
+  return Math.max(1, Math.round((T.petScale * dpr) / artRes));
+}
+
+/** 一个皮肤格子实际画出来的边长（CSS 像素）。物理碰撞盒也用它，保证和画出来的一样大。 */
+export function cellSize(T: Pick<Tuning, 'petScale' | 'artRes'>, dpr: number): number {
+  return (spritePixel(T, dpr) * Math.max(1, Math.round(T.artRes))) / dpr;
+}
 
 export function mergeTuning(base: Tuning, patch: Partial<Record<string, unknown>> | null | undefined): Tuning {
   const out = { ...base };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { wrapAngle } from '../src/engine/math';
-import { DEFAULT_TUNING, type Tuning } from '../src/engine/params';
+import { DEFAULT_TUNING, type Tuning, cellSize } from '../src/engine/params';
 import { type ImpactTier, Pet } from '../src/engine/pet';
 
 const STEP = 1 / 120;
@@ -29,6 +29,26 @@ function run(pet: Pet, seconds: number, until?: (p: Pet) => boolean): ImpactTier
 
 const launch = (pet: Pet, x: number, y: number, vx: number, vy: number) =>
   pet.launch({ x, y, vx, vy, rot: 0, angVel: 0 });
+
+describe('大小', () => {
+  it('碰撞盒和画出来的一样大（像素风会把大小量化）', () => {
+    // artRes 3、dpr 1：petScale 5 实际画成 6px/格
+    const pet = makePet({ petScale: 5 });
+    expect(pet.cell).toBe(cellSize(pet.tuning, 1));
+    expect(pet.halfH).toBe(30);
+  });
+
+  it('站着时改大小、换 DPI，脚始终贴着地面', () => {
+    const pet = makePet();
+    pet.placeOnFloor(800);
+    for (const petScale of [4.5, 9, 3, 12]) {
+      pet.setTuning({ ...pet.tuning, petScale });
+      expect(pet.pos.y + pet.halfH).toBeCloseTo(H);
+    }
+    pet.setPixelRatio(1.25);
+    expect(pet.pos.y + pet.halfH).toBeCloseTo(H);
+  });
+});
 
 describe('落地分级', () => {
   it('矮处掉落是普通落地', () => {
@@ -63,7 +83,7 @@ describe('落地分级', () => {
     expect(tiers.at(-1)).toBe('soft');
   });
 
-  it('水平速度大时成龙式翻滚，翻完弹起并且脚先着地', () => {
+  it('水平速度大时翻滚，翻完弹起并且脚先着地', () => {
     const pet = makePet();
     launch(pet, 200, 700, 2600, 300);
     const tiers = run(pet, 1, (p) => p.mode !== 'air');
@@ -236,7 +256,7 @@ describe('摸摸', () => {
 });
 
 describe('小动作', () => {
-  it('吃金币：咬三口，每口掉金屑，吃完回到发呆', () => {
+  it('吃TOKEN：咬三口，每口掉金屑，吃完回到发呆', () => {
     const pet = makePet({ activityChance: 0 });
     pet.placeOnFloor(800);
     expect(pet.perform('coin')).toBe(true);
