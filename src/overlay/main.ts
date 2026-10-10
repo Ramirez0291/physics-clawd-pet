@@ -1,6 +1,6 @@
 import clawdDef from '../../skins/clawd/skin.json';
 import { type Vec2, clamp } from '../engine/math';
-import { DEFAULT_TUNING, mergeTuning, type Tuning } from '../engine/params';
+import { DEFAULT_TUNING, PARAM_DEFS, mergeTuning, type Tuning } from '../engine/params';
 import { ParticleSystem } from '../engine/particles';
 import { type Bounds, type LaunchState, Pet } from '../engine/pet';
 import { VelocitySampler } from '../engine/throw';
@@ -11,6 +11,7 @@ import {
   isTauri,
   loadTuning,
   openDebugPanel,
+  saveTuning,
 } from '../platform/host';
 import { Renderer } from '../render/renderer';
 import { type SkinDef, loadSkin } from '../skin/types';
@@ -21,6 +22,9 @@ const CALM_MODES = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin']);
 /** 固定物理步长：与显示器刷新率无关 */
 const STEP = 1 / 120;
 const MAX_STEPS = 24;
+
+/** 大小的范围和步进，与调试面板的"大小"滑块一致 */
+const SCALE_DEF = PARAM_DEFS.find((d) => d.key === 'petScale')!;
 
 export interface Telemetry {
   mode: string;
@@ -220,6 +224,47 @@ async function main() {
     }
   });
 
+  // ---------- 大小：在宠物上滚滚轮 / 托盘菜单 ----------
+
+  let saveTimer = 0;
+  const setScale = (v: number) => {
+    const s = clamp(Math.round(v / SCALE_DEF.step) * SCALE_DEF.step, SCALE_DEF.min, SCALE_DEF.max);
+    if (s === tuning.petScale) return;
+    tuning = mergeTuning(tuning, { petScale: s });
+    pet.setTuning(tuning);
+    publishState();
+    // 只把大小写回已保存的参数，调试面板里没保存的改动不跟着落盘
+    clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(async () => {
+      try {
+        await saveTuning({ ...(await loadTuning()), petScale: tuning.petScale });
+      } catch (e) {
+        console.warn('保存大小失败', e);
+      }
+    }, 500);
+  };
+
+  // 触控板会连续发很小的 delta，攒够一格再变
+  let wheelAcc = 0;
+  canvas.addEventListener(
+    'wheel',
+    (e) => {
+      if (!drag && !renderer.hitTest(e.clientX, e.clientY, tuning.hitPadding)) return;
+      e.preventDefault();
+      wheelAcc += e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 33 : e.deltaY;
+      const notches = Math.trunc(wheelAcc / 100);
+      if (!notches) return;
+      wheelAcc -= notches * 100;
+      setScale(tuning.petScale - notches * SCALE_DEF.step);
+    },
+    { passive: false },
+  );
+
+  bus.on('pet-size', (msg: { scale?: number; delta?: number }) => {
+    if (typeof msg.scale === 'number') setScale(msg.scale);
+    else if (typeof msg.delta === 'number') setScale(tuning.petScale + msg.delta);
+  });
+
   // ---------- 主循环 ----------
 
   let acc = 0;
@@ -356,7 +401,7 @@ function setupBrowserPreview() {
   document.body.classList.add('browser');
   const bar = document.createElement('div');
   bar.className = 'preview-bar';
-  bar.innerHTML = '浏览器预览模式 · 拖住 Clawd 甩出去 · 在它头上来回晃鼠标摸摸它 · ';
+  bar.innerHTML = '浏览器预览模式 · 拖住 Clawd 甩出去 · 在它头上来回晃鼠标摸摸它 · 在它身上滚滚轮调大小 · ';
   const btn = document.createElement('button');
   btn.textContent = '打开调试面板 (D)';
   btn.onclick = () => void openDebugPanel();

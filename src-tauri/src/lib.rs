@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::{
@@ -160,13 +160,23 @@ fn desk_ready(state: State<Shared>) {
 
 struct HideItem(MenuItem<tauri::Wry>);
 
+/// 托盘"大小"菜单的预设（px/格），id 是 "size:<值>"
+const SIZE_PRESETS: [(&str, f64); 4] = [("小", 4.0), ("中（默认）", 6.0), ("大", 9.0), ("特大", 12.0)];
+
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let debug = MenuItem::with_id(app, "debug", "调试面板", true, None::<&str>)?;
     let reset = MenuItem::with_id(app, "reset", "把 Clawd 叫回来", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, "hide", "隐藏 Clawd", true, None::<&str>)?;
+    let size = Submenu::with_id(app, "size", "大小", true)?;
+    size.append(&MenuItem::with_id(app, "size+", "放大", true, None::<&str>)?)?;
+    size.append(&MenuItem::with_id(app, "size-", "缩小", true, None::<&str>)?)?;
+    size.append(&PredefinedMenuItem::separator(app)?)?;
+    for (label, scale) in SIZE_PRESETS {
+        size.append(&MenuItem::with_id(app, format!("size:{scale}"), label, true, None::<&str>)?)?;
+    }
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&debug, &reset, &hide, &sep, &quit])?;
+    let menu = Menu::with_items(app, &[&debug, &reset, &hide, &size, &sep, &quit])?;
     app.manage(HideItem(hide));
 
     let mut builder = TrayIconBuilder::with_id("main")
@@ -191,7 +201,18 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 let _ = item.set_text(if hidden { "显示 Clawd" } else { "隐藏 Clawd" });
             }
             "quit" => app.exit(0),
-            _ => {}
+            // 覆盖层负责夹到范围内并保存
+            "size+" => {
+                let _ = app.emit("pet-size", serde_json::json!({ "delta": 1.0 }));
+            }
+            "size-" => {
+                let _ = app.emit("pet-size", serde_json::json!({ "delta": -1.0 }));
+            }
+            id => {
+                if let Some(scale) = id.strip_prefix("size:").and_then(|v| v.parse::<f64>().ok()) {
+                    let _ = app.emit("pet-size", serde_json::json!({ "scale": scale }));
+                }
+            }
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
