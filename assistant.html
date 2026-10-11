@@ -11,6 +11,7 @@
       <button role="tab" data-tab="todo" data-t="tabTodo"></button>
       <button role="tab" data-tab="calendar" data-t="tabCalendar"></button>
       <button role="tab" data-tab="remind" data-t="tabRemind"></button>
+      <button role="tab" data-tab="claude">Claude Code</button>
     </nav>
 
     <main>
@@ -77,6 +78,40 @@
           <button type="button" data-test="event" data-t="testEvent"></button>
           <button type="button" data-test="todo" data-t="testTodo"></button>
         </div>
+      </section>
+
+      <section id="tab-claude" hidden>
+        <h2 data-t="ccLink"></h2>
+        <p id="ccState" class="cc-state"></p>
+        <div class="row-actions">
+          <button id="ccToggle" class="primary" type="button"></button>
+        </div>
+        <label class="switch cc-perm"><input id="ccPermission" type="checkbox" /> <span data-t="ccPermission"></span></label>
+        <p id="ccHint" class="hint"></p>
+
+        <h2 data-t="ccReactions"></h2>
+        <div class="settings">
+          <label class="switch"><input id="ccCelebrate" type="checkbox" /> <span data-t="ccCelebrate"></span></label>
+          <label class="switch"><input id="ccDoneBubble" type="checkbox" /> <span data-t="ccDoneBubble"></span></label>
+          <label class="switch"><input id="ccZap" type="checkbox" /> <span data-t="ccZap"></span></label>
+          <label class="switch"><input id="ccMinis" type="checkbox" /> <span data-t="ccMinis"></span></label>
+        </div>
+
+        <h2 data-t="ccSessions"></h2>
+        <ul id="ccSessions" class="list"></ul>
+        <p id="ccNoSessions" class="empty" data-t="ccNoSessions"></p>
+
+        <h2 data-t="tryIt"></h2>
+        <div class="row-actions">
+          <button type="button" data-cc-test="think" data-t="ccTestThink"></button>
+          <button type="button" data-cc-test="work" data-t="ccTestWork"></button>
+          <button type="button" data-cc-test="sub" data-t="ccTestSub"></button>
+          <button type="button" data-cc-test="compact" data-t="ccTestCompact"></button>
+          <button type="button" data-cc-test="error" data-t="ccTestError"></button>
+          <button type="button" data-cc-test="perm" data-t="ccTestPerm"></button>
+          <button type="button" data-cc-test="done" data-t="ccTestDone"></button>
+        </div>
+        <p class="hint" data-t="ccTestHint"></p>
       </section>
     </main>
     <footer id="note" class="note"></footer>

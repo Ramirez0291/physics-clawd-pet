@@ -41,6 +41,20 @@ interface Ghost {
 }
 
 const GHOST_LIFE = 0.12;
+
+/** 一块精灵画布：宠物先画进这里，再贴到主画布上 */
+interface Target {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  fur: FurCache;
+}
+
+function makeTarget(): Target {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  return { canvas, ctx: canvas.getContext('2d', { willReadFrequently: false })!, fur: new FurCache() };
+}
 const STAR = '#f5c542';
 const INK = '#141413';
 const HEART = ['.#.#.', '#####', '.###.', '..#..'];
@@ -64,6 +78,8 @@ export class Renderer {
   private lastSig = '';
   private fullClear = true;
   private fur = new FurCache();
+  /** 迷你 Clawd 之类的附加宠物：各有一块精灵画布 */
+  private extras = new Map<Pet, Target>();
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -84,6 +100,7 @@ export class Renderer {
     this.skin = skin;
     this.lastSig = '';
     this.fur.clear();
+    this.extras.clear();
   }
 
   resize(cssW: number, cssH: number, dpr: number) {
@@ -108,9 +125,12 @@ export class Renderer {
     return r !== null && x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
   }
 
-  draw(pet: Pet, particles: ParticleSystem, T: Tuning, dt: number) {
-    const frame = this.rasterize(pet, T);
+  /** extras：一起画的附加宠物（不参与点击判定、没有残影） */
+  draw(pet: Pet, particles: ParticleSystem, T: Tuning, dt: number, extras: readonly Pet[] = []) {
+    const main: Target = { canvas: this.sprite, ctx: this.sctx, fur: this.fur };
+    const frame = this.rasterize(pet, T, main);
     this.frame = frame;
+    for (const p of this.extras.keys()) if (!extras.includes(p)) this.extras.delete(p);
 
     const fast = Math.hypot(pet.vel.x, pet.vel.y) > T.trailSpeed;
     if (T.trail && fast && (pet.mode === 'air' || pet.mode === 'roll')) this.pushGhost(frame);
@@ -118,10 +138,14 @@ export class Renderer {
     while (this.ghosts.length && this.ghosts[0].age > GHOST_LIFE) this.ghostPool.push(this.ghosts.shift()!.canvas);
 
     const showStars = pet.dizzy > 0.3 && pet.mode !== 'air' && pet.mode !== 'held';
+    // Claude Code 在思考：头顶冒"……"
+    const showThink = pet.agentMood === 'thinking' && pet.emote === null && (pet.mode === 'idle' || pet.mode === 'walk');
     const animated =
       this.ghosts.length > 0 ||
       (T.particles && particles.list.length > 0) ||
       showStars ||
+      showThink ||
+      extras.length > 0 ||
       pet.emote !== null ||
       T.showHitbox ||
       T.showVelocity;
@@ -145,17 +169,24 @@ export class Renderer {
     }
     ctx.globalAlpha = 1;
     this.blit(this.sprite, frame.ox, frame.oy, frame.w, frame.h, frame.up);
+    for (const p of extras) {
+      let t = this.extras.get(p);
+      if (!t) this.extras.set(p, (t = makeTarget()));
+      const f = this.rasterize(p, p.tuning, t);
+      this.blit(t.canvas, f.ox, f.oy, f.w, f.h, f.up);
+    }
 
     if (T.particles) this.drawParticles(particles, frame.fx);
     if (showStars) this.drawStars(pet, frame);
     if (pet.emote) this.drawEmote(pet, frame);
+    if (showThink) this.drawThink(pet, frame);
     if (T.showHitbox || T.showVelocity) this.drawDebug(pet, T);
   }
 
   // ---------- 精灵栅格化 ----------
 
-  private rasterize(pet: Pet, T: Tuning): SpriteFrame {
-    if (!this.skin.pixelArt) return this.drawSmooth(pet, T);
+  private rasterize(pet: Pet, T: Tuning, target: Target): SpriteFrame {
+    if (!this.skin.pixelArt) return this.drawSmooth(pet, T, target);
     const skin = this.skin;
     const dpr = this.dpr;
     const up = spritePixel(T, dpr);
@@ -232,9 +263,9 @@ export class Renderer {
     const W = Math.min(512, Math.max(1, Math.ceil((maxX - ox) / up)));
     const H = Math.min(512, Math.max(1, Math.ceil((maxY - oy) / up)));
 
-    if (this.sprite.width < W || this.sprite.height < H) {
-      this.sprite.width = Math.max(this.sprite.width, W);
-      this.sprite.height = Math.max(this.sprite.height, H);
+    if (target.canvas.width < W || target.canvas.height < H) {
+      target.canvas.width = Math.max(target.canvas.width, W);
+      target.canvas.height = Math.max(target.canvas.height, H);
     }
     const img = new ImageData(W, H);
     const buf = new Uint32Array(img.data.buffer);
@@ -269,7 +300,7 @@ export class Renderer {
         }
       }
     }
-    this.sctx.putImageData(img, 0, 0);
+    target.ctx.putImageData(img, 0, 0);
 
     const opaque =
       ox1 >= ox0
@@ -279,7 +310,7 @@ export class Renderer {
   }
 
   /** 平滑画风：画进精灵画布，1 个精灵像素 = 1 个设备像素 */
-  private drawSmooth(pet: Pet, T: Tuning): SpriteFrame {
+  private drawSmooth(pet: Pet, T: Tuning, target: Target): SpriteFrame {
     const skin = this.skin;
     const dpr = this.dpr;
     const unit = cellSize(T, dpr, false);
@@ -316,14 +347,14 @@ export class Renderer {
     const oy = Math.floor(minY) - 1;
     const W = Math.min(2048, Math.max(1, Math.ceil(maxX) + 1 - ox));
     const H = Math.min(2048, Math.max(1, Math.ceil(maxY) + 1 - oy));
-    if (this.sprite.width < W || this.sprite.height < H) {
-      this.sprite.width = Math.max(this.sprite.width, W);
-      this.sprite.height = Math.max(this.sprite.height, H);
+    if (target.canvas.width < W || target.canvas.height < H) {
+      target.canvas.width = Math.max(target.canvas.width, W);
+      target.canvas.height = Math.max(target.canvas.height, H);
     }
-    const g = this.sctx;
+    const g = target.ctx;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, W, H);
-    drawItems(g, items, skin, m, ox, oy, unit * dpr, this.fur);
+    drawItems(g, items, skin, m, ox, oy, unit * dpr, target.fur);
 
     const opaque = Number.isFinite(minX) ? { x0: minX, y0: minY, x1: maxX, y1: maxY } : null;
     return { ox, oy, up: 1, w: W, h: H, m, opaque, hash: hash >>> 0, fx: spritePixel(T, dpr) };
@@ -464,6 +495,26 @@ export class Renderer {
     ctx.fillStyle = STAR;
     for (const [x, y] of cells) ctx.fillRect(x0 + x * u, y0 + y * u, u, u);
     this.markDirty(x0 - o, y0 - o, 2 * u + 2 * o, 6 * u + 2 * o);
+  }
+
+  /** 思考中：头顶三个点，像聊天软件的"对方正在输入"一样轮流亮 */
+  private drawThink(pet: Pet, f: SpriteFrame) {
+    const ctx = this.ctx;
+    const d = this.dpr;
+    const u = f.fx;
+    const cx = Math.round((pet.pos.x + pet.visOffset.x) * d);
+    const y = Math.round((pet.pos.y + pet.visOffset.y - Math.max(pet.halfW, pet.halfH)) * d - u * 4);
+    const lit = Math.floor(pet.t * 3) % 3;
+    const o = Math.max(1, Math.round(u / 2));
+    for (let i = 0; i < 3; i++) {
+      const x = cx + (i - 1) * 3 * u - Math.round(u / 2);
+      const yy = y - (i === lit ? u : 0);
+      ctx.fillStyle = INK;
+      ctx.fillRect(x - o, yy - o, u + 2 * o, u + 2 * o);
+      ctx.fillStyle = i === lit ? '#ffffff' : '#c9ccd3';
+      ctx.fillRect(x, yy, u, u);
+      this.markDirty(x - o, yy - o, u + 2 * o, u + 2 * o + u);
+    }
   }
 
   private drawDebug(pet: Pet, T: Tuning) {

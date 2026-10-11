@@ -73,7 +73,7 @@ Requires Windows 10 or 11 with WebView2 (already included in Windows 11).
 | Hide / show | Tray icon → right-click → **Hide Clawd** |
 | Tuning panel | Left-click the tray icon |
 
-The tray menu follows your Windows display language: Chinese on a Chinese system, English everywhere else. The tuning panel itself is in Chinese for now.
+The tray menu, the Assistant window, and what Clawd says follow your Windows display language: Chinese, Japanese (where Clawd speaks Osaka dialect — it's an Osaka crab now), or English everywhere else. The tuning panel itself is in Chinese for now.
 
 ### Tuning panel
 
@@ -190,7 +190,7 @@ The Dots skin is likewise **fan art** of OpenAI's Dots, not affiliated with or e
 | 隐藏 / 显示 | 托盘图标右键 → **隐藏 Clawd** |
 | 调教面板 | 左键点托盘图标 |
 
-托盘菜单跟随 Windows 显示语言：中文系统显示中文，其他语言显示英文。
+托盘菜单、小助手窗口和 Clawd 说的话都跟随 Windows 显示语言：中文系统显示中文，日文系统显示日文（日文版的 Clawd 是只大阪的螃蟹，说关西腔），其他语言显示英文。调教面板目前只有中文。
 
 ### 调教面板
 

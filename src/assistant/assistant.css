@@ -7,7 +7,12 @@
   --accent: #d77757;
   --ok: #1f9d5b;
   --err: #c2410c;
+  /* 日文系统里汉字要用日文字形（直、骨、令……），字体栈按 <html lang> 切换 */
+  --ui-font: system-ui, 'Microsoft YaHei UI', sans-serif;
   color-scheme: light;
+}
+:root:lang(ja) {
+  --ui-font: system-ui, 'Yu Gothic UI', 'Meiryo UI', sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -35,7 +40,7 @@ body {
   flex-direction: column;
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.45 system-ui, 'Microsoft YaHei UI', sans-serif;
+  font: 13px/1.45 var(--ui-font);
 }
 main {
   flex: 1;
@@ -299,6 +304,24 @@ input[type='checkbox'] {
   border-top: 1px solid var(--border);
   background: var(--panel);
 }
+.cc-state {
+  margin: 4px 0 10px;
+}
+.cc-state.ok {
+  color: var(--ok);
+}
+.cc-state.err {
+  color: var(--err);
+}
+.cc-perm {
+  margin-top: 12px;
+}
+.session-mood {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 [hidden] {
   display: none !important;
 }

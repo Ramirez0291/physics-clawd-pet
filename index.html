@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Clawd</title>
     <style>
+      /* 日文系统里汉字要用日文字形（直、骨、令……），所以字体栈按 <html lang> 切换 */
+      :root {
+        --ui-font: system-ui, 'Microsoft YaHei UI', sans-serif;
+      }
+      :root:lang(ja) {
+        --ui-font: system-ui, 'Yu Gothic UI', 'Meiryo UI', sans-serif;
+      }
       html,
       body {
         margin: 0;
@@ -38,7 +45,7 @@
         border: 2px solid #141413;
         border-radius: 6px;
         box-shadow: 3px 3px 0 rgba(20, 20, 19, 0.3);
-        font: 13px/1.45 system-ui, 'Microsoft YaHei UI', sans-serif;
+        font: 13px/1.45 var(--ui-font);
         white-space: pre-line;
         overflow-wrap: anywhere;
         cursor: default;
@@ -85,6 +92,22 @@
       .bubble.kind-todo {
         --accent: #2f7ad1;
       }
+      .bubble.kind-claude {
+        --accent: #c96442;
+        max-width: 320px;
+      }
+      .bubble-code {
+        margin: 6px 0 0;
+        padding: 5px 7px;
+        max-height: 7.5em;
+        overflow: hidden;
+        border-radius: 4px;
+        background: #141413;
+        color: #f4f1ea;
+        font: 12px/1.4 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
       .bubble-title {
         font-weight: 600;
       }
@@ -129,7 +152,7 @@
         border-radius: 4px;
         background: #fff;
         color: #141413;
-        font: 12px/1.5 system-ui, 'Microsoft YaHei UI', sans-serif;
+        font: 12px/1.5 var(--ui-font);
         cursor: pointer;
       }
       .bubble-actions button:hover {

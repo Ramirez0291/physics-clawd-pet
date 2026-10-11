@@ -1,122 +1,23 @@
 // 小助手窗口：管理待办、日历订阅、报时和休息提醒的设置。
 // 提醒本身由覆盖层（宠物那边）负责；这里只改数据，再显示覆盖层发来的日程和状态。
 
+import { folderName } from '../claude/agent';
+import type { ClaudeLive } from '../overlay/claude';
 import type { AssistantStatus } from '../overlay/companion';
-import { createBus, loadAssistant, pickIcsFile, saveAssistant } from '../platform/host';
-import { dayLabel, hhmm, isZh } from './i18n';
+import {
+  type CcStatus,
+  ccInstall,
+  ccStatus,
+  ccUninstall,
+  createBus,
+  loadAssistant,
+  pickIcsFile,
+  saveAssistant,
+} from '../platform/host';
+import { dayLabel, hhmm, pick } from './i18n';
 import { type AssistantData, type CalendarSource, type Todo, dueTime, newId, sanitizeAssistant } from './model';
+import { W } from './strings';
 
-const ZH = {
-  tabTodo: '待办',
-  tabCalendar: '日历',
-  tabRemind: '报时与休息',
-  todoPlaceholder: '要做什么？回车添加',
-  dueTitle: '截止时间（可不填），到点 Clawd 会提醒你',
-  add: '添加',
-  todoEmpty: '还没有待办。加一条试试，设了截止时间的到点会提醒。',
-  done: (n: number) => `已完成 ${n} 项`,
-  clearDone: '清除已完成',
-  delete: '删除',
-  noDue: '设截止时间',
-  sources: '日历订阅',
-  sourceEmpty: '还没有日历。贴一个 iCal 订阅地址，或者选一个本地 .ics 文件。',
-  urlPlaceholder: 'https://…/basic.ics 或 webcal://…',
-  subscribe: '订阅',
-  pickFile: '选择本地 .ics 文件…',
-  refresh: '立即刷新',
-  urlHint:
-    'Google 日历：设置 → 日历设置 → "iCal 格式的私密地址"；Outlook：设置 → 日历 → 共享日历 → 发布日历 → ICS 链接；飞书、钉钉一般在日历设置的"订阅/导出"里。订阅地址相当于密码，别分享给别人。',
-  calSettings: '日历提醒',
-  leadMin: '提前提醒',
-  refreshMin: '订阅刷新间隔',
-  allDayHour: '全天日程在几点提醒',
-  minutes: '分钟',
-  hour: (h: number) => `${h} 点`,
-  upcoming: '接下来 7 天',
-  noUpcoming: '接下来 7 天没有日程。',
-  waiting: '正在等 Clawd 回应…（宠物没在运行的话，日程和状态显示不出来）',
-  statusOk: (n: number, t: string) => `✓ ${n} 个日程 · ${t} 更新`,
-  statusLoading: '读取中…',
-  statusErr: (e: string) => `✗ ${e}`,
-  enabled: '启用',
-  file: '本地文件',
-  chime: '整点报时',
-  chimeFrom: '从',
-  chimeTo: '到（含）',
-  chimeHint: '只在这段时间里的整点报时。Clawd 会举着铃铛摇，几点就摇几下。',
-  rest: '休息提醒',
-  workMin: '连续用电脑',
-  awayMin: '离开多久算休息过',
-  repeatMin: '没休息的话隔多久再提醒',
-  active: (m: number) => `现在已经连续用了 ${m} 分钟。`,
-  tryIt: '试一下',
-  testChime: '报时',
-  testRest: '休息',
-  testEvent: '日程',
-  testTodo: '待办',
-  saved: '已保存',
-  saveFailed: (e: string) => `保存失败：${e}`,
-  pickUnavailable: '浏览器预览里不能选本地文件',
-  badUrl: '要以 http://、https:// 或 webcal:// 开头',
-  allDay: '全天',
-};
-
-const EN: typeof ZH = {
-  tabTodo: 'To-dos',
-  tabCalendar: 'Calendar',
-  tabRemind: 'Chime & breaks',
-  todoPlaceholder: 'What needs doing? Press Enter to add',
-  dueTitle: 'Due time (optional). Clawd reminds you when it is due',
-  add: 'Add',
-  todoEmpty: 'No to-dos yet. Give one a due time and Clawd will remind you.',
-  done: (n: number) => `${n} completed`,
-  clearDone: 'Clear completed',
-  delete: 'Delete',
-  noDue: 'Set due time',
-  sources: 'Calendar subscriptions',
-  sourceEmpty: 'No calendars yet. Paste an iCal subscription link or choose a local .ics file.',
-  urlPlaceholder: 'https://…/basic.ics or webcal://…',
-  subscribe: 'Subscribe',
-  pickFile: 'Choose a local .ics file…',
-  refresh: 'Refresh now',
-  urlHint:
-    'Google Calendar: Settings → your calendar → "Secret address in iCal format". Outlook: Settings → Calendar → Shared calendars → Publish a calendar → ICS link. Treat the link like a password.',
-  calSettings: 'Calendar reminders',
-  leadMin: 'Remind me',
-  refreshMin: 'Refresh every',
-  allDayHour: 'All-day events at',
-  minutes: 'min',
-  hour: (h: number) => `${h}:00`,
-  upcoming: 'Next 7 days',
-  noUpcoming: 'Nothing in the next 7 days.',
-  waiting: 'Waiting for Clawd… (events and status show up while the pet is running)',
-  statusOk: (n: number, t: string) => `✓ ${n} events · updated ${t}`,
-  statusLoading: 'Loading…',
-  statusErr: (e: string) => `✗ ${e}`,
-  enabled: 'Enabled',
-  file: 'Local file',
-  chime: 'Hourly chime',
-  chimeFrom: 'From',
-  chimeTo: 'To (inclusive)',
-  chimeHint: 'Chimes only on the hour within this range. Clawd rings a bell once per hour on the clock.',
-  rest: 'Break reminders',
-  workMin: 'After using the computer for',
-  awayMin: 'Counts as a break after',
-  repeatMin: 'If no break, remind again after',
-  active: (m: number) => `You've been at it for ${m} minutes.`,
-  tryIt: 'Try it',
-  testChime: 'Chime',
-  testRest: 'Break',
-  testEvent: 'Event',
-  testTodo: 'To-do',
-  saved: 'Saved',
-  saveFailed: (e: string) => `Save failed: ${e}`,
-  pickUnavailable: 'Local files are not available in the browser preview',
-  badUrl: 'Must start with http://, https:// or webcal://',
-  allDay: 'All day',
-};
-
-const W = isZh ? ZH : EN;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 /** 建一个元素：属性直接赋值（className、value、checked……），后面是子节点 */
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -131,8 +32,8 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 async function main() {
-  document.documentElement.lang = isZh ? 'zh-CN' : 'en';
-  document.title = isZh ? 'Clawd 小助手' : 'Clawd Assistant';
+  // <html lang> 由 i18n.ts 按系统语言设置
+  document.title = pick({ zh: 'Clawd 小助手', ja: 'Clawd アシスタント', en: 'Clawd Assistant' });
   for (const n of document.querySelectorAll<HTMLElement>('[data-t]')) n.textContent = String(W[n.dataset.t as keyof typeof W]);
   for (const n of document.querySelectorAll<HTMLInputElement>('[data-t-placeholder]'))
     n.placeholder = String(W[n.dataset.tPlaceholder as keyof typeof W]);
@@ -234,7 +135,8 @@ async function main() {
       if (v) editTodo(t.id, (x) => (x.text = v));
       else text.value = t.text;
     };
-    text.onkeydown = (e) => e.key === 'Enter' && text.blur();
+    // 日文/中文输入法组字时按 Enter 是"确定候选"，不是"完成编辑"（keyCode 229 = IME 正在处理）
+    text.onkeydown = (e) => e.key === 'Enter' && !e.isComposing && e.keyCode !== 229 && text.blur();
     const overdue = !t.done && t.due !== null && dueTime(t.due) < Date.now();
     const due = el('input', { type: 'datetime-local', value: t.due ?? '', className: `due${overdue ? ' overdue' : ''}${t.due ? '' : ' unset'}`, title: W.noDue });
     due.onchange = () =>
@@ -395,6 +297,10 @@ async function main() {
     bindNum('chimeFrom', (d) => d.chime.from, (d, v) => (d.chime.from = v)),
     bindNum('chimeTo', (d) => d.chime.to, (d, v) => (d.chime.to = v)),
     bindBool('restOn', (d) => d.rest.enabled, (d, v) => (d.rest.enabled = v)),
+    bindBool('ccCelebrate', (d) => d.claude.celebrate, (d, v) => (d.claude.celebrate = v)),
+    bindBool('ccDoneBubble', (d) => d.claude.doneBubble, (d, v) => (d.claude.doneBubble = v)),
+    bindBool('ccZap', (d) => d.claude.zap, (d, v) => (d.claude.zap = v)),
+    bindBool('ccMinis', (d) => d.claude.minis, (d, v) => (d.claude.minis = v)),
     bindNum('workMin', (d) => d.rest.workMin, (d, v) => (d.rest.workMin = v)),
     bindNum('awayMin', (d) => d.rest.awayMin, (d, v) => (d.rest.awayMin = v)),
     bindNum('repeatMin', (d) => d.rest.repeatMin, (d, v) => (d.rest.repeatMin = v)),
@@ -408,9 +314,143 @@ async function main() {
     b.onclick = () => bus.emit('assistant-cmd', { cmd: 'test', kind: b.dataset.test });
   }
 
+  // ---------- Claude Code ----------
+
+  let cc: CcStatus | null = null;
+  let live: ClaudeLive | null = null;
+  const permBox = $<HTMLInputElement>('ccPermission');
+  permBox.checked = true;
+  const agoText = (t: number) => W.ago(Math.max(0, Math.round((Date.now() - t) / 1000)));
+
+  function renderClaude() {
+    if (!cc) return;
+    const state = $('ccState');
+    const toggle = $<HTMLButtonElement>('ccToggle');
+    const h = cc.hooks;
+    let text: string;
+    let cls = 'cc-state';
+    const problem = cc.bridge_error ?? h.error;
+    if (problem) {
+      text = problem;
+      cls += ' err';
+    } else if (h.installed && !h.current) {
+      text = W.ccStale;
+      cls += ' err';
+    } else if (h.installed) {
+      text = `${W.ccOn}\n${cc.last_event ? W.ccLast(agoText(cc.last_event)) : W.ccNever}`;
+      cls += ' ok';
+    } else {
+      text = W.ccOff;
+    }
+    state.textContent = text;
+    state.className = cls;
+    state.style.whiteSpace = 'pre-line';
+    toggle.textContent = h.installed ? (h.current ? W.ccDisable : W.ccReinstall) : W.ccEnable;
+    toggle.className = h.installed && h.current ? '' : 'primary';
+    toggle.disabled = !!cc.bridge_error && !h.installed;
+    $('ccHint').textContent = W.ccHint(h.settings_path);
+
+    const sessions = live?.sessions ?? [];
+    $('ccSessions').replaceChildren(
+      ...sessions.map((s) => {
+        const mood = `${W.ccMood[s.mood] ?? s.mood}${s.subagents ? W.ccSubagents(s.subagents) : ''} · ${agoText(s.last)}`;
+        return el(
+          'li',
+          {},
+          el(
+            'div',
+            { className: 'grow' },
+            el('div', { className: 'source-name', textContent: folderName(s.cwd) || s.id }),
+            el('div', { className: 'source-target', textContent: s.cwd, title: s.cwd }),
+          ),
+          el('span', { className: 'session-mood', textContent: mood }),
+        );
+      }),
+    );
+    $('ccNoSessions').hidden = sessions.length > 0;
+  }
+
+  async function refreshClaude() {
+    try {
+      cc = await ccStatus();
+      if (cc.hooks.installed) permBox.checked = cc.hooks.permission;
+    } catch (e) {
+      note(String(e));
+    }
+    renderClaude();
+  }
+
+  $('ccToggle').onclick = async () => {
+    try {
+      if (cc?.hooks.installed && cc.hooks.current) await ccUninstall();
+      else await ccInstall(permBox.checked);
+    } catch (e) {
+      note(String(e));
+    }
+    await refreshClaude();
+  };
+  permBox.onchange = async () => {
+    if (!cc?.hooks.installed) return;
+    try {
+      await ccInstall(permBox.checked);
+    } catch (e) {
+      note(String(e));
+    }
+    await refreshClaude();
+  };
+
+  bus.on('cc-live', (l: ClaudeLive) => {
+    live = l;
+    renderClaude();
+  });
+  bus.emit('cc-hello');
+  void refreshClaude();
+  window.setInterval(() => {
+    if (!$('tab-claude').hidden) void refreshClaude();
+  }, 5000);
+
+  // 试一下：在本地编几条 Claude Code 事件发给覆盖层
+  const testSession = 'clawd-test';
+  const testCwd = pick({ zh: '~/示例项目', ja: '~/サンプル', en: '~/demo-project' });
+  const fake = (event: string, extra: Record<string, unknown> = {}) =>
+    bus.emit('cc-event', { event, session_id: testSession, cwd: testCwd, t: Date.now(), ...extra });
+  let subN = 0;
+  const tests: Record<string, () => void> = {
+    think: () => fake('UserPromptSubmit'),
+    work: () => fake('PreToolUse', { tool_name: 'Bash', tool: 'npm test' }),
+    sub: () => fake('SubagentStart', { agent_id: `test-${++subN}`, agent_type: 'general-purpose' }),
+    compact: () => {
+      fake('PreCompact', { trigger: 'manual' });
+      window.setTimeout(() => fake('PostCompact', { trigger: 'manual' }), 5000);
+    },
+    error: () => fake('PostToolUseFailure', { tool_name: 'Bash', tool: 'npm test', error: 'Exit code 1' }),
+    perm: () =>
+      bus.emit('cc-permission', {
+        id: -Date.now(),
+        event: 'PermissionRequest',
+        session_id: testSession,
+        cwd: testCwd,
+        t: Date.now(),
+        tool_name: 'Bash',
+        tool: 'rm -rf node_modules && npm install',
+      }),
+    done: () => {
+      // 假装这一轮干了一分钟、用过工具：庆祝和气泡都会出来
+      fake('UserPromptSubmit', { t: Date.now() - 60000 });
+      fake('PreToolUse', { tool_name: 'Edit', tool: 'src/app.ts', t: Date.now() - 50000 });
+      fake('Stop', {
+        last: pick({ zh: '全部 42 个测试都通过了。', ja: '42個のテストがすべて通りました。', en: 'All 42 tests pass.' }),
+      });
+    },
+  };
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-cc-test]')) {
+    b.onclick = () => tests[b.dataset.ccTest!]?.();
+  }
+
   // ---------- 画 ----------
 
   function render() {
+    renderClaude();
     renderTodos();
     renderSources();
     renderUpcoming();

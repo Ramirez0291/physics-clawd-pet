@@ -16,9 +16,9 @@ use windows::Win32::UI::Shell::{
     SHQueryUserNotificationState, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowLongPtrW,
-    GetWindowRect, IsIconic, IsWindowVisible, IsZoomed, SystemParametersInfoW, GWL_EXSTYLE,
-    GWL_STYLE, SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, WS_CAPTION,
+    EnumWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindow, GetWindowLongPtrW,
+    GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible, IsZoomed, SystemParametersInfoW,
+    GWL_EXSTYLE, GWL_STYLE, GW_OWNER, SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, WS_CAPTION,
     WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 
@@ -188,6 +188,33 @@ pub fn visible_windows(skip: isize) -> Vec<WinInfo> {
         out.push(WinInfo { hwnd: id, rect, platform });
     }
     out
+}
+
+/// 按顺序看这些进程（通常是某个进程的父、祖父……），返回第一个拥有可见主窗口的进程的那个窗口。
+/// 同一个进程有好几个窗口时取 Z 序最上面的。用来找"在跑 Claude Code 的是哪个终端/编辑器窗口"。
+pub fn window_for_pids(pids: &[u32]) -> Option<isize> {
+    if pids.is_empty() {
+        return None;
+    }
+    let mut handles: Vec<isize> = Vec::with_capacity(256);
+    let _ = unsafe { EnumWindows(Some(collect), LPARAM(&mut handles as *mut Vec<isize> as isize)) };
+    let mut by_pid: std::collections::HashMap<u32, isize> = std::collections::HashMap::new();
+    for id in handles {
+        let h = hwnd(id);
+        if frame_bounds(id).is_none() {
+            continue;
+        }
+        let ex = unsafe { GetWindowLongPtrW(h, GWL_EXSTYLE) } as u32;
+        let tool = ex & WS_EX_TOOLWINDOW.0 != 0 && ex & WS_EX_APPWINDOW.0 == 0;
+        let owned = unsafe { GetWindow(h, GW_OWNER) }.is_ok_and(|o| !o.0.is_null());
+        if tool || owned || ex & WS_EX_TRANSPARENT.0 != 0 {
+            continue;
+        }
+        let mut pid = 0u32;
+        unsafe { GetWindowThreadProcessId(h, Some(&mut pid)) };
+        by_pid.entry(pid).or_insert(id);
+    }
+    pids.iter().find_map(|p| by_pid.get(p).copied())
 }
 
 /// 计算可站立的顶边：每个窗口的顶边减去被它上面（Z 序更高）的窗口挡住的部分，再裁到工作区内。

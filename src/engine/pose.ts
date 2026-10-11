@@ -3,7 +3,17 @@
 
 import { type Skin, parseHex } from '../skin/types';
 import { type Affine, type Vec2, clamp, mul, rotate, scale, squashAlong, translate } from './math';
-import { CHIME_GAP, CHIME_LEAD, COIN_BITES, NORMAL, type Pet, STOCK_LEN, STRETCH_RELEASE } from './pet';
+import {
+  CHIME_GAP,
+  CHIME_LEAD,
+  COIN_BITES,
+  KNOCK_BEATS,
+  NORMAL,
+  type Pet,
+  STOCK_LEN,
+  STRETCH_RELEASE,
+  SWEEP_STROKE,
+} from './pet';
 
 /** 单个部件的局部变换（格子单位），缩放以部件中心为锚 */
 export interface PartPose {
@@ -103,6 +113,11 @@ const C = {
   faint: parseHex('#b8b4aa'),
   red: parseHex('#e5534b'),
   check: parseHex('#2fbf71'),
+  bolt: parseHex('#fff4b8'),
+  boltCore: parseHex('#9fd8ff'),
+  stick: parseHex('#8a5a2b'),
+  straw: parseHex('#d9a441'),
+  strawDark: parseHex('#a8742a'),
 };
 
 /** 电脑翻开的程度：开头翻开、结尾合上，各 0.45 秒 */
@@ -331,6 +346,44 @@ function signProps(pet: Pet, skin: Skin, out: Prop[]) {
       add(8, y + 1, r === 2 ? 9 : 14, 1, C.faint);
     }
   }
+}
+
+/** 被电：身体两边的闪电（折线），隔帧换个形状 */
+function zapProps(pet: Pet, skin: Skin, out: Prop[]) {
+  const [gw, gh] = skin.grid;
+  const flick = Math.floor(pet.modeTime * 24) % 3;
+  if (flick === 2) return;
+  for (const side of [-1, 1]) {
+    // 从身体上方往下的一道闪电：每段横着错开一点
+    let x = side < 0 ? -2 : gw * 3 + 1;
+    let y = Math.round(skin.bodyBox.y * 3) - 2 + flick * 2;
+    const len = Math.round(gh * 3 * 0.7);
+    for (let i = 0; i < len; i += 2) {
+      out.push({ x: x * PX, y: (y + i) * PX, w: PX, h: 2 * PX, rgba: i % 4 === 0 ? C.bolt : C.boltCore });
+      x += ((i / 2 + flick) % 3 === 0 ? 1 : -1) * side;
+    }
+  }
+}
+
+/** 扫帚：从手里斜着拄到地上，扫帚头跟着来回扫 */
+function broomProps(pet: Pet, skin: Skin, swing: number, out: Prop[]) {
+  const [gw, gh] = skin.grid;
+  const d = pet.dir;
+  // 道具像素坐标：手在身体靠 dir 那侧的中间高度，扫帚头落在身体外面的地上
+  const hx = Math.round((gw / 2 + d * (gw / 2 - 1)) * 3);
+  const hy = Math.round(gh * 3 * 0.45);
+  const bx = Math.round(hx + d * (10 + swing * 3));
+  const by = gh * 3 - 4;
+  const steps = Math.max(Math.abs(bx - hx), by - hy);
+  for (let i = 0; i <= steps; i++) {
+    const x = Math.round(hx + ((bx - hx) * i) / steps);
+    const y = Math.round(hy + ((by - hy) * i) / steps);
+    out.push({ x: x * PX, y: y * PX, w: PX, h: PX, rgba: C.stick });
+  }
+  // 扫帚头：上窄下宽的一撮
+  out.push({ x: (bx - 2) * PX, y: by * PX, w: 5 * PX, h: PX, rgba: C.strawDark });
+  out.push({ x: (bx - 3) * PX, y: (by + 1) * PX, w: 7 * PX, h: 2 * PX, rgba: C.straw });
+  out.push({ x: (bx - 4) * PX, y: (by + 3) * PX, w: 9 * PX, h: PX, rgba: C.straw });
 }
 
 /** 脸红：每只眼睛下面一小块，稍微偏外 */
@@ -603,6 +656,61 @@ export function computePose(pet: Pet, skin: Skin): Pose {
       eyeLookScale = 1 - k;
       // 松劲之后满足地眯一会儿
       if (tm > STRETCH_RELEASE + 0.25) eyeSquint = blinking(t) ? 0.25 : 0.6;
+      break;
+    }
+    case 'zap': {
+      // 被电：全身绷直乱颤，手脚炸开，眼睛一闪一闪
+      const flick = Math.floor(t * 30) % 2;
+      torso.dx = flick ? 0.6 : -0.6;
+      torso.sy = 1.06;
+      each((pp, part, i) => {
+        if (part.role === 'arm') {
+          pp.dx = part.side * 1.2;
+          pp.dy = flick ? -2 : -1;
+        } else if (part.role === 'leg') {
+          pp.dx = part.side * 0.8;
+          pp.dy = (i + flick) % 2 ? -0.6 : 0;
+        }
+      });
+      eyeSquint = flick ? 0.25 : 1.4;
+      eyeLookScale = 0;
+      zapProps(pet, skin, props);
+      break;
+    }
+    case 'knock': {
+      // 跺脚：两手举着往下砸，每一脚之前抬一只脚
+      const tm = pet.modeTime;
+      const next = KNOCK_BEATS.find((b) => b > tm) ?? Infinity;
+      const prev = [...KNOCK_BEATS].reverse().find((b) => b <= tm) ?? -Infinity;
+      const since = tm - prev;
+      const until = next - tm;
+      const stompSide = pet.bites % 2 ? 1 : -1;
+      each((pp, part) => {
+        if (part.role === 'arm') {
+          pp.dy = since < 0.12 ? 0.5 : -2.5;
+          pp.dx = part.side * 0.3;
+        } else if (part.role === 'leg' && part.side === stompSide && until < 0.2) {
+          pp.dy = -1;
+        }
+      });
+      crouchBy(since < 0.12 ? 0.6 : 0);
+      eyeSquint = blinking(t) ? 0.25 : 0.6;
+      break;
+    }
+    case 'sweep': {
+      // 扫地：低着头，两手握扫帚来回扫，身子跟着晃
+      const phase = (pet.modeTime % SWEEP_STROKE) / SWEEP_STROKE;
+      const swing = Math.sin(phase * Math.PI * 2);
+      crouchBy(0.5);
+      torso.dx = swing * 0.4 * pet.dir;
+      each((pp, part) => {
+        if (part.role === 'arm') {
+          pp.dx = pet.dir * (0.8 + swing * 0.4);
+          pp.dy = 0.5;
+        }
+      });
+      look = { x: pet.dir * 0.8, y: 0.8 };
+      broomProps(pet, skin, swing, props);
       break;
     }
     case 'sign': {

@@ -29,6 +29,9 @@ const MODE_NAMES: Record<string, string> = {
   chime: '报时',
   stretch: '伸懒腰',
   sign: '举牌子',
+  zap: '被电',
+  knock: '跺脚',
+  sweep: '扫地',
 };
 const SIDE_NAMES: Record<string, string> = { floor: '地面', ceiling: '天花板', left: '左墙', right: '右墙' };
 const TIER_NAMES: Record<string, string> = {

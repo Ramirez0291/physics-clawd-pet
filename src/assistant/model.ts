@@ -48,11 +48,24 @@ export interface Todo {
   created: number;
 }
 
+/** Claude Code 联动时宠物的反应（hooks 装没装由原生侧管，不在这里） */
+export interface ClaudeSettings {
+  /** 一轮干完：后空翻 + 彩纸 */
+  celebrate: boolean;
+  /** 一轮干了很久：完成时冒气泡告诉你 */
+  doneBubble: boolean;
+  /** 出错：被电一下 */
+  zap: boolean;
+  /** 子代理：掉下来一只迷你 Clawd */
+  minis: boolean;
+}
+
 export interface AssistantData {
   chime: ChimeSettings;
   rest: RestSettings;
   calendar: CalendarSettings;
   todos: Todo[];
+  claude: ClaudeSettings;
 }
 
 export const DEFAULT_ASSISTANT: AssistantData = {
@@ -60,6 +73,7 @@ export const DEFAULT_ASSISTANT: AssistantData = {
   rest: { enabled: true, workMin: 45, awayMin: 5, repeatMin: 10 },
   calendar: { leadMin: 10, refreshMin: 30, allDayHour: 9, sources: [] },
   todos: [],
+  claude: { celebrate: true, doneBubble: true, zap: true, minis: true },
 };
 
 const num = (v: unknown, def: number, lo: number, hi: number) =>
@@ -84,6 +98,7 @@ export function sanitizeAssistant(raw: unknown): AssistantData {
   const cal = obj(r.calendar);
   const sources = Array.isArray(cal.sources) ? cal.sources : [];
   const todos = Array.isArray(r.todos) ? r.todos : [];
+  const cc = obj(r.claude);
   return {
     chime: {
       enabled: bool(c.enabled, d.chime.enabled),
@@ -122,6 +137,12 @@ export function sanitizeAssistant(raw: unknown): AssistantData {
         reminded: bool(t.reminded, false),
         created: typeof t.created === 'number' ? t.created : Date.now(),
       })),
+    claude: {
+      celebrate: bool(cc.celebrate, d.claude.celebrate),
+      doneBubble: bool(cc.doneBubble, d.claude.doneBubble),
+      zap: bool(cc.zap, d.claude.zap),
+      minis: bool(cc.minis, d.claude.minis),
+    },
   };
 }
 

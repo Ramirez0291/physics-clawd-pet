@@ -12,6 +12,8 @@ use tauri::{
 
 #[cfg(windows)]
 mod assist;
+mod claude;
+mod lang;
 #[cfg(windows)]
 mod desktop;
 #[cfg(windows)]
@@ -54,6 +56,34 @@ mod assist {
 use watcher::{DeskState, Shared, OVERLAY};
 
 const DEBUG: &str = "debug";
+
+/// 不启动宠物、只做一件事就退出的命令行用法。返回 Some(退出码) 表示已经处理了。
+pub fn cli(args: &[String]) -> Option<i32> {
+    if args.iter().any(|a| a == "--clawd-pet-hook") {
+        return Some(claude::hook_main(args));
+    }
+    if args.iter().any(|a| a == "--remove-claude-hooks") {
+        // 卸载程序调用：把装进 Claude Code 设置里的 hooks 删掉
+        return Some(if claude::uninstall().is_ok() { 0 } else { 1 });
+    }
+    None
+}
+
+/// 只允许一只宠物：第二个实例直接退出（返回 false）
+#[cfg(windows)]
+fn single_instance() -> bool {
+    use windows::core::w;
+    use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+    use windows::Win32::System::Threading::CreateMutexW;
+    // 句柄故意不关：进程活着它就一直占着
+    let created = unsafe { CreateMutexW(None, false, w!(r"Local\PhysicsClawdPet.SingleInstance")) };
+    created.is_ok() && unsafe { GetLastError() } != ERROR_ALREADY_EXISTS
+}
+
+#[cfg(not(windows))]
+fn single_instance() -> bool {
+    true
+}
 const ASSISTANT: &str = "assistant";
 
 /// 覆盖层：铺满主屏的工作区（不含任务栏）。
@@ -103,7 +133,7 @@ fn create_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     Ok(win)
 }
 
-/// 托盘菜单和窗口标题的文字：系统界面语言是中文就用中文，否则英文
+/// 托盘菜单和窗口标题的文字：系统界面语言是中文 / 日文就用中文 / 日文，否则英文
 struct Texts {
     debug_title: &'static str,
     debug: &'static str,
@@ -160,24 +190,30 @@ const EN: Texts = Texts {
     quit: "Quit",
 };
 
-#[cfg(windows)]
-fn system_is_chinese() -> bool {
-    // LANGID 的低 10 位是主语言；0x04 = LANG_CHINESE（简体、繁体都算）
-    let id = unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() };
-    id & 0x3ff == 0x04
-}
-
-#[cfg(not(windows))]
-fn system_is_chinese() -> bool {
-    std::env::var("LANG").is_ok_and(|l| l.starts_with("zh"))
-}
+// 大阪の蟹：宠物说的话是关西腔，菜单是普通的礼貌体
+const JA: Texts = Texts {
+    debug_title: "Clawd 調整パネル",
+    debug: "調整パネル",
+    assistant_title: "Clawd アシスタント",
+    assistant: "アシスタント（ToDo / カレンダー / 通知）",
+    pick_ics: "カレンダーファイルを選択",
+    ics_filter: "iCalendar (*.ics)",
+    reset: "{name}を呼び戻す",
+    hide: "{name}を隠す",
+    show: "{name}を表示",
+    character: "キャラクター",
+    size: "サイズ",
+    bigger: "大きく",
+    smaller: "小さく",
+    presets: ["小", "中（標準）", "大", "特大"],
+    quit: "終了",
+};
 
 fn texts() -> &'static Texts {
-    static LANG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if *LANG.get_or_init(system_is_chinese) {
-        &ZH
-    } else {
-        &EN
+    match lang::lang() {
+        lang::Lang::Zh => &ZH,
+        lang::Lang::Ja => &JA,
+        lang::Lang::En => &EN,
     }
 }
 
@@ -251,6 +287,58 @@ fn save_tuning(app: AppHandle, tuning: serde_json::Value) -> Result<String, Stri
 }
 
 // ---------- 小助手 ----------
+
+// ---------- Claude Code 联动 ----------
+
+/// 桥接令牌：第一次用时生成，存在配置目录里（hooks 的命令行里也带着它）
+fn bridge_token(app: &AppHandle) -> String {
+    if let Ok(Some(v)) = load_json(app, "claude-bridge.json") {
+        if let Some(t) = v.get("token").and_then(|t| t.as_str()).filter(|t| t.len() >= 16) {
+            return t.to_string();
+        }
+    }
+    let token = claude::new_token();
+    let _ = save_json(app, "claude-bridge.json", &serde_json::json!({ "token": token }));
+    token
+}
+
+#[derive(serde::Serialize)]
+struct CcStatus {
+    hooks: claude::HookStatus,
+    port: u16,
+    /// 桥接服务没起来的原因
+    bridge_error: Option<String>,
+    /// 上一次收到 Claude Code 事件的时间（ms，0 = 还没有）
+    last_event: u64,
+}
+
+#[tauri::command]
+fn cc_status(bridge: State<Arc<claude::Bridge>>, token: State<BridgeToken>) -> CcStatus {
+    CcStatus {
+        hooks: claude::status(&token.0),
+        port: claude::PORT,
+        bridge_error: bridge.error.lock().unwrap().clone(),
+        last_event: bridge.last_event.load(std::sync::atomic::Ordering::Relaxed),
+    }
+}
+
+#[tauri::command]
+fn cc_install(token: State<BridgeToken>, permission: bool) -> Result<(), String> {
+    claude::install(&token.0, permission)
+}
+
+#[tauri::command]
+fn cc_uninstall() -> Result<(), String> {
+    claude::uninstall()
+}
+
+/// 权限气泡上的按钮：allow / deny / pass（交还终端）
+#[tauri::command]
+fn cc_decide(bridge: State<Arc<claude::Bridge>>, id: u64, behavior: String) -> bool {
+    bridge.decide(id, &behavior)
+}
+
+struct BridgeToken(String);
 
 #[tauri::command]
 fn load_assistant(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
@@ -480,6 +568,9 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if !single_instance() {
+        return;
+    }
     tauri::Builder::default()
         .manage::<Shared>(Arc::new(Mutex::new(DeskState::default())))
         .invoke_handler(tauri::generate_handler![
@@ -497,10 +588,24 @@ pub fn run() {
             desk_idle_ms,
             fetch_text,
             read_text_file,
-            pick_ics_file
+            pick_ics_file,
+            cc_status,
+            cc_install,
+            cc_uninstall,
+            cc_decide
         ])
         .setup(|app| {
             let handle = app.handle();
+            // Claude Code 联动：本机桥接服务；装过 hooks 但程序换了位置（开发版 ↔ 安装版）就自动更新
+            let token = bridge_token(handle);
+            let bridge = claude::Bridge::new(token.clone());
+            bridge.start(handle.clone());
+            let st = claude::status(&token);
+            if st.installed && !st.current {
+                let _ = claude::install(&token, st.permission);
+            }
+            app.manage(bridge);
+            app.manage(BridgeToken(token));
             // 托盘先建好：覆盖层一加载就会调 tray_set_skins
             build_tray(handle)?;
             create_overlay(handle)?;

@@ -98,13 +98,47 @@ function formatterFor(zone: string): Intl.DateTimeFormat | null {
   return zoneFormatters.get(zone)!;
 }
 
+/**
+ * 日文/中文版 Outlook 常把时区的显示名当 TZID 导出，如「(UTC+09:00) 大阪、札幌、東京」。
+ * 先按城市名认（能带上夏令时规则），认不出就用括号里的固定偏移（夏令时期间会差一小时，但比按本机时区算强）。
+ */
+const ZONE_LABELS: [RegExp, string][] = [
+  [/東京|大阪|札幌|Tokyo|Osaka|Sapporo/i, 'Asia/Tokyo'],
+  [/ソウル|서울|Seoul/i, 'Asia/Seoul'],
+  [/北京|上海|Beijing|Shanghai/i, 'Asia/Shanghai'],
+  [/台北|Taipei/i, 'Asia/Taipei'],
+  [/シンガポール|Singapore/i, 'Asia/Singapore'],
+  [/コルカタ|ムンバイ|Kolkata|Mumbai/i, 'Asia/Kolkata'],
+  [/シドニー|Sydney/i, 'Australia/Sydney'],
+  [/ロンドン|London/i, 'Europe/London'],
+  [/アムステルダム|ベルリン|Amsterdam|Berlin/i, 'Europe/Berlin'],
+  [/パリ|マドリード|Paris|Madrid/i, 'Europe/Paris'],
+  [/太平洋|Pacific Time/i, 'America/Los_Angeles'],
+  [/山地|Mountain Time/i, 'America/Denver'],
+  [/中部標準時|Central Time/i, 'America/Chicago'],
+  [/東部標準時|Eastern Time/i, 'America/New_York'],
+];
+
+function labelledZone(z: string): string | null {
+  const m = /^\(\s*(?:UTC|GMT)\s*(?:([+-])(\d{1,2})(?::?(\d{2}))?)?\s*\)\s*(.*)$/i.exec(z);
+  if (!m) return null;
+  const rest = m[4];
+  for (const [re, zone] of ZONE_LABELS) if (re.test(rest)) return zone;
+  if (!m[1]) return 'UTC';
+  const h = +m[2];
+  const mi = +(m[3] ?? 0);
+  if (h > 14 || mi > 59) return null;
+  if (mi === 0) return h === 0 ? 'UTC' : `Etc/GMT${m[1] === '+' ? '-' : '+'}${h}`; // Etc/GMT 的符号是反的
+  return `${m[1]}${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`; // 如 +05:30（新版 JS 才认，不认就当本机）
+}
+
 /** TZID → 认识的 IANA 名；认不出来返回 'local'（按本机时区算，总比不显示强） */
 export function resolveZone(tzid: string | undefined): string {
   if (!tzid) return 'local';
   let z = tzid.trim().replace(/^"|"$/g, '');
   // 有的导出器会写成 /Asia/Shanghai 或 /citadel.org/.../Asia/Shanghai
   if (z.startsWith('/')) z = z.split('/').slice(-2).join('/');
-  z = WINDOWS_ZONES[z] ?? z;
+  z = WINDOWS_ZONES[z] ?? labelledZone(z) ?? z;
   if (z === 'UTC' || z === 'Etc/UTC' || z === 'GMT') return 'utc';
   return formatterFor(z) ? z : 'local';
 }

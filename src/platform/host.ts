@@ -3,6 +3,15 @@
 
 import type { Vec2 } from '../engine/math';
 import type { Bounds, Platform } from '../engine/pet';
+import { pick } from '../assistant/i18n';
+
+/** 只在浏览器预览里会看到的提示 */
+const PREVIEW_NO_LINK = () =>
+  pick({
+    zh: '浏览器预览里不能联动 Claude Code',
+    ja: 'ブラウザのプレビューではClaude Codeと連携できません',
+    en: 'Claude Code linking is not available in the browser preview',
+  });
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -55,7 +64,7 @@ export async function saveTuning(tuning: object): Promise<string> {
     return invoke<string>('save_tuning', { tuning });
   }
   localStorage.setItem(LS_KEY, JSON.stringify(tuning));
-  return '浏览器 localStorage';
+  return pick({ zh: '浏览器 localStorage', ja: 'ブラウザの localStorage', en: 'browser localStorage' });
 }
 
 export async function openDebugPanel() {
@@ -138,7 +147,55 @@ export async function readTextFile(path: string): Promise<string> {
     const { invoke } = await import('@tauri-apps/api/core');
     return invoke<string>('read_text_file', { path });
   }
-  throw new Error('浏览器预览里读不了本地文件');
+  throw new Error(
+    pick({
+      zh: '浏览器预览里读不了本地文件',
+      ja: 'ブラウザのプレビューではローカルファイルを読めません',
+      en: 'Local files cannot be read in the browser preview',
+    }),
+  );
+}
+
+// ---------- Claude Code 联动 ----------
+
+export interface CcStatus {
+  hooks: { installed: boolean; permission: boolean; current: boolean; settings_path: string; error: string | null };
+  port: number;
+  bridge_error: string | null;
+  last_event: number;
+}
+
+export async function ccStatus(): Promise<CcStatus> {
+  if (!isTauri) {
+    return {
+      hooks: { installed: false, permission: false, current: true, settings_path: '~/.claude/settings.json', error: null },
+      port: 0,
+      bridge_error: PREVIEW_NO_LINK(),
+      last_event: 0,
+    };
+  }
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<CcStatus>('cc_status');
+}
+
+/** 往 ~/.claude/settings.json 装上（或者更新）hooks。permission：是否在气泡上批准权限请求 */
+export async function ccInstall(permission: boolean): Promise<void> {
+  if (!isTauri) throw new Error(PREVIEW_NO_LINK());
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('cc_install', { permission });
+}
+
+export async function ccUninstall(): Promise<void> {
+  if (!isTauri) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('cc_uninstall');
+}
+
+/** 权限气泡上的选择：allow / deny / pass（交还终端） */
+export async function ccDecide(id: number, behavior: 'allow' | 'deny' | 'pass'): Promise<boolean> {
+  if (!isTauri) return false;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<boolean>('cc_decide', { id, behavior });
 }
 
 /** 弹出系统的"打开文件"对话框选 .ics，取消返回 null */

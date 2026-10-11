@@ -15,7 +15,10 @@ import {
 } from '../platform/host';
 import { Renderer } from '../render/renderer';
 import { SKINS, findSkin } from '../skin/registry';
+import { Bubbles } from './bubbles';
+import { ClaudeLink } from './claude';
 import { Companion } from './companion';
+import { Minis } from './minis';
 
 /** 这些状态下动作幅度小，可以降帧省电 */
 const CALM_MODES = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin', 'sign']);
@@ -79,10 +82,17 @@ async function main() {
   const pet = new Pet(tuning, skin.grid, bounds());
   const particles = new ParticleSystem();
   const renderer = new Renderer(canvas, skin);
+  /** Claude Code 的子代理：迷你 Clawd */
+  const minis = new Minis(pet, particles, () => ({
+    pixelArt: skin.pixelArt,
+    dpr: window.devicePixelRatio || 1,
+    particles: !!tuning.particles,
+  }));
   /** 皮肤决定碰撞盒、画风（像素会量化大小）、会做的小动作和毛团颜色 */
   const applySkin = () => {
     renderer.setSkin(skin);
     pet.setGrid(skin.grid, { pixelArt: skin.pixelArt, actions: skin.actions });
+    minis.restyle();
     particles.fluffColor = skin.palette.body ?? skin.parts[0].hex;
   };
   applySkin();
@@ -109,7 +119,7 @@ async function main() {
 
   // 开场：从天上掉下来
   pet.dropFrom(window.innerWidth * 0.5, window.innerHeight * 0.1);
-  if (import.meta.env.DEV) Object.assign(window, { __clawd: { pet, particles, renderer } });
+  if (import.meta.env.DEV) Object.assign(window, { __clawd: { pet, particles, renderer, minis } });
 
   // ---------- 桌面：窗口平台、脚下窗口追踪、全屏免打扰 ----------
 
@@ -147,8 +157,10 @@ async function main() {
 
   // ---------- 小助手：报时、休息、日程、待办 ----------
 
-  const companion = new Companion(bus, pet, () => renderer.hitRect(0), () => dndHidden);
+  const bubbles = new Bubbles(pet, () => renderer.hitRect(0), () => dndHidden);
+  const companion = new Companion(bus, pet, bubbles);
   void companion.start();
+  new ClaudeLink(bus, pet, bubbles, minis, () => companion.data.claude).start();
 
   // ---------- 鼠标 ----------
 
@@ -246,6 +258,10 @@ async function main() {
           pet.perform(msg.arg as 'petted' | Activity);
         } else if (CUES.includes(msg.arg as Cue)) {
           pet.cue(msg.arg as Cue, { count: new Date().getHours() % 12 || 12 });
+        } else if (msg.arg === 'mini') {
+          minis.spawn(`debug-${performance.now()}`);
+        } else if (msg.arg === 'mini-clear') {
+          minis.clear();
         }
         break;
     }
@@ -354,6 +370,7 @@ async function main() {
   const calm = () =>
     !drag &&
     !carrierMoving() &&
+    !minis.active &&
     CALM_MODES.has(pet.mode) &&
     particles.list.length === 0 &&
     !renderer.animating &&
@@ -372,14 +389,21 @@ async function main() {
   };
 
   const frame = (now: number) => {
-    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
-    last = now;
     if (dndHidden) {
+      last = now;
       // 覆盖层已被隐藏：什么都不算，低频等待恢复
-      companion.frame(now);
+      bubbles.frame(now);
       setTimeout(() => frame(performance.now()), 250);
       return;
     }
+    update(now);
+    schedule();
+  };
+
+  /** 一帧：算物理、画出来、告诉原生侧可点击区域 */
+  const update = (now: number) => {
+    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+    last = now;
 
     const cursor: Vec2 | null = host.cursor();
     if (!drag) {
@@ -415,6 +439,7 @@ async function main() {
     while (acc >= STEP && n < MAX_STEPS) {
       pet.step(STEP, cursor);
       for (const ev of pet.consumeEvents()) if (tuning.particles) particles.handle(ev);
+      minis.step(STEP, cursor);
       if (pet.hitstop <= 0) particles.step(STEP);
       acc -= STEP;
       simDt += STEP;
@@ -422,8 +447,8 @@ async function main() {
     }
     if (n >= MAX_STEPS) acc = 0;
 
-    renderer.draw(pet, particles, tuning, simDt);
-    const bubble = companion.frame(now);
+    renderer.draw(pet, particles, tuning, simDt, minis.pets);
+    const bubble = bubbles.frame(now);
 
     // 把可点击区域告诉原生侧（它负责悬停判定和点击穿透）。平静时 10Hz 就够。
     if (!calm() || now - hitSentAt >= 100) {
@@ -471,9 +496,17 @@ async function main() {
       };
       bus.emit('telemetry', t);
     }
-    schedule();
   };
   requestAnimationFrame(frame);
+  // 开发时：浏览器预览面板在后台没有 rAF，用 __clawd.advance(秒) 手动往前推几帧
+  if (import.meta.env.DEV) {
+    let fakeNow = performance.now();
+    Object.assign((window as unknown as { __clawd: object }).__clawd, {
+      advance: (sec: number) => {
+        for (let i = 0; i < sec * 60; i++) update((fakeNow = Math.max(fakeNow + 1000 / 60, performance.now())));
+      },
+    });
+  }
 }
 
 /** 浏览器预览：给个桌面似的背景和打开调教面板的入口 */

@@ -1,7 +1,7 @@
 import { rand } from './math';
 import type { ImpactTier, PetEvent } from './pet';
 
-export type ParticleKind = 'dust' | 'debris' | 'shock' | 'heart' | 'fluff' | 'note';
+export type ParticleKind = 'dust' | 'debris' | 'shock' | 'heart' | 'fluff' | 'note' | 'confetti' | 'spark' | 'smoke';
 
 export interface Particle {
   kind: ParticleKind;
@@ -28,6 +28,9 @@ const DEBRIS = '#b45f43';
 const HEART = '#ff6b8a';
 const GOLD = ['#f5c542', '#b07d12', '#fff4b8'];
 const NOTE = ['#f5c542', '#79c0ff', '#ff9d8f'];
+const CONFETTI = ['#f0524f', '#f5c542', '#2fbf71', '#79c0ff', '#c084fc', '#ff9d8f', '#fffbe6'];
+const SPARK = ['#fff4b8', '#f5c542', '#ffffff', '#9fd8ff'];
+const SMOKE = ['#5b5752', '#7d7770', '#3f3c39'];
 
 const DUST_COUNT: Record<ImpactTier, number> = {
   soft: 3,
@@ -59,6 +62,123 @@ export class ParticleSystem {
     else if (ev.type === 'chomp') this.chomp(ev.x, ev.y, ev.nx, ev.ny);
     else if (ev.type === 'fluff') this.fluff(ev.x, ev.y, ev.nx, ev.ny);
     else if (ev.type === 'ding') this.ding(ev.x, ev.y, ev.nx, ev.ny);
+    else if (ev.type === 'confetti') this.confetti(ev.x, ev.y, ev.nx, ev.ny);
+    else if (ev.type === 'spark') this.spark(ev.x, ev.y);
+    else if (ev.type === 'smoke') this.smoke(ev.x, ev.y);
+    else if (ev.type === 'sweep') this.sweep(ev.x, ev.y, ev.dir);
+    else if (ev.type === 'poof') this.poof(ev.x, ev.y);
+  }
+
+  /** 庆祝：一把彩纸沿法线方向往外喷，慢悠悠飘下来 */
+  private confetti(x: number, y: number, nx: number, ny: number) {
+    const r = this.rng;
+    const base = Math.atan2(ny, nx);
+    for (let i = 0; i < 30; i++) {
+      const a = base + (r() - 0.5) * 2.2;
+      const sp = rand(450, 1100, r);
+      const life = rand(1.3, 2.2, r);
+      this.push({
+        kind: 'confetti',
+        x,
+        y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life,
+        maxLife: life,
+        size: r() < 0.3 ? 1.5 : 1,
+        color: CONFETTI[Math.floor(r() * CONFETTI.length)],
+        drag: 2.2,
+        gravity: 700,
+      });
+    }
+  }
+
+  /** 被电：一个点上崩出几粒很快熄灭的火花 */
+  private spark(x: number, y: number) {
+    const r = this.rng;
+    for (let i = 0; i < 3; i++) {
+      const a = r() * Math.PI * 2;
+      const sp = rand(250, 700, r);
+      const life = rand(0.12, 0.28, r);
+      this.push({
+        kind: 'spark',
+        x,
+        y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life,
+        maxLife: life,
+        size: 1,
+        color: SPARK[Math.floor(r() * SPARK.length)],
+        drag: 4,
+        gravity: 0,
+      });
+    }
+  }
+
+  /** 电糊了：头顶冒一股黑烟 */
+  private smoke(x: number, y: number) {
+    const r = this.rng;
+    for (let i = 0; i < 7; i++) {
+      const life = rand(1, 1.7, r);
+      this.push({
+        kind: 'smoke',
+        x: x + rand(-12, 12, r),
+        y,
+        vx: rand(-40, 40, r),
+        vy: rand(-160, -60, r),
+        life,
+        maxLife: life,
+        size: rand(2, 3.5, r),
+        color: SMOKE[Math.floor(r() * SMOKE.length)],
+        drag: 1,
+        gravity: -30,
+      });
+    }
+  }
+
+  /** 扫地：顺着扫帚的方向贴地扬起一小撮灰 */
+  private sweep(x: number, y: number, dir: number) {
+    const r = this.rng;
+    for (let i = 0; i < 4; i++) {
+      const life = rand(0.45, 0.8, r);
+      this.push({
+        kind: 'dust',
+        x: x + rand(-6, 6, r),
+        y: y - 2,
+        vx: dir * rand(140, 360, r),
+        vy: rand(-170, -50, r),
+        life,
+        maxLife: life,
+        size: rand(1, 2, r),
+        color: DUST[i % 2],
+        drag: 3,
+        gravity: 500,
+      });
+    }
+  }
+
+  /** 迷你 Clawd 消失：噗地一团白烟 */
+  private poof(x: number, y: number) {
+    const r = this.rng;
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + r() * 0.4;
+      const sp = rand(120, 260, r);
+      const life = rand(0.35, 0.6, r);
+      this.push({
+        kind: 'dust',
+        x,
+        y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life,
+        maxLife: life,
+        size: rand(1.5, 2.5, r),
+        color: DUST[0],
+        drag: 5,
+        gravity: 0,
+      });
+    }
   }
 
   /** 摇铃：一个音符飘起来，晃晃悠悠往外走 */

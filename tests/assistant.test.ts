@@ -47,6 +47,27 @@ describe('iCal 解析', () => {
     expect(resolveZone('Not/AZone')).toBe('local');
   });
 
+  it('TZID：日文版 Outlook 把显示名当 TZID 导出', () => {
+    expect(resolveZone('(UTC+09:00) 大阪、札幌、東京')).toBe('Asia/Tokyo');
+    expect(resolveZone('(GMT+09:00) Osaka, Sapporo, Tokyo')).toBe('Asia/Tokyo');
+    expect(resolveZone('(UTC-08:00) 太平洋標準時 (米国およびカナダ)')).toBe('America/Los_Angeles');
+    expect(resolveZone('(UTC+08:00) 北京、重慶、香港特別行政区、ウルムチ')).toBe('Asia/Shanghai');
+    // 城市认不出：用括号里的固定偏移
+    expect(resolveZone('(UTC+03:00) 未知の都市')).toBe('Etc/GMT-3');
+    expect(resolveZone('(UTC-03:00) Salvador')).toBe('Etc/GMT+3');
+    expect(resolveZone('(UTC) 協定世界時')).toBe('utc');
+    expect(resolveZone('(UTC+05:30) 未知')).toBe('+05:30');
+    // 括号里是胡话：当本机
+    expect(resolveZone('(UTC+99:00) x')).toBe('local');
+    const text = ics(
+      'UID:a\r\nSUMMARY:会議\r\nDTSTART;TZID="(UTC+09:00) 大阪、札幌、東京":20261012T100000\r\nDURATION:PT30M',
+      'UID:b\r\nSUMMARY:定例\r\nDTSTART;TZID="(UTC-08:00) 太平洋標準時 (米国およびカナダ)":20260715T090000\r\nDURATION:PT30M',
+    );
+    const [b, a] = parseCalendar(text, ...ALL); // 按开始时间排序：7 月的在前
+    expect(a.start).toBe(utc('2026-10-12T01:00:00Z'));
+    expect(b.start).toBe(utc('2026-07-15T16:00:00Z')); // 夏令时 UTC-7：城市名认出来了，所以夏天也对
+  });
+
   it('全天事件和浮动时间按本机时区', () => {
     const text = ics('UID:a\r\nSUMMARY:国庆\r\nDTSTART;VALUE=DATE:20261001\r\nDTEND;VALUE=DATE:20261004');
     const [e] = parseCalendar(text, ...ALL);

@@ -1,6 +1,7 @@
 // 日历订阅的缓存：按设置的间隔下载/读取每个来源，解析出最近几天的日程。
 
 import { fetchText, readTextFile } from '../platform/host';
+import { T } from './i18n';
 import { type CalEvent, parseCalendar } from './ical';
 import { type CalendarSource, normalizeUrl } from './model';
 
@@ -87,7 +88,7 @@ export class CalendarCache {
     e.loading = true;
     try {
       const text = s.kind === 'url' ? await fetchText(normalizeUrl(s.target)) : await readTextFile(s.target);
-      if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error('不是 iCalendar 格式（没有 BEGIN:VCALENDAR）');
+      if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error(T.calNotIcal);
       e.text = text;
       e.status = { ...e.status, ok: true, error: null, fetchedAt: Date.now() };
       this.parse(e, now);
@@ -108,7 +109,7 @@ export class CalendarCache {
       e.events = parseCalendar(e.text!, now - BEHIND, now + AHEAD);
       e.status = { ...e.status, count: e.events.length };
     } catch (err) {
-      e.status = { ...e.status, ok: false, error: `解析失败：${String(err)}` };
+      e.status = { ...e.status, ok: false, error: T.calParseFailed(String(err)) };
     }
   }
 }
