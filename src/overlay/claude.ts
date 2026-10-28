@@ -22,6 +22,7 @@ const ZAP_COOLDOWN = 10000;
 /** 权限气泡的小字：关掉气泡以后去哪里选 */
 function permHint(provider?: AgentProvider): string {
   if (provider === 'codex') return pick({ zh: '关掉气泡 = 回 Codex 里自己选', ja: '吹き出しを閉じたら、Codex側で選べるで', en: 'Close the bubble to answer in Codex' });
+  if (provider === 'agy') return pick({ zh: '关掉气泡 = 交给 Antigravity 自己的规则', ja: '吹き出しを閉じたら、Antigravityのルールに任せるで', en: 'Close the bubble to leave it to Antigravity' });
   if (provider === 'dsh') return pick({ zh: '关掉气泡 = 回 DeepSeek Harness 里自己选', ja: '吹き出しを閉じたら、DeepSeek Harness側で選べるで', en: 'Close the bubble to answer in DeepSeek Harness' });
   return T.ccPermHint;
 }
