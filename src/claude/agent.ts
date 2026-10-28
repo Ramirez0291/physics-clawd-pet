@@ -3,13 +3,14 @@
 
 import type { AgentMood } from '../engine/pet';
 
-/** 联动对象：Claude Code、Codex、DeepSeek Harness */
-export type AgentProvider = 'claude' | 'codex' | 'dsh';
+/** 联动对象：Claude Code、Codex、DeepSeek Harness、Antigravity */
+export type AgentProvider = 'claude' | 'codex' | 'dsh' | 'agy';
 
 /** 把文案里的 "Claude Code" / "Claude" 换成实际联动的那个 */
 export function agentText(text: string, provider?: AgentProvider): string {
   if (provider === 'codex') return text.replace(/Claude(?: Code)?/g, 'Codex');
   if (provider === 'dsh') return text.replace(/Claude(?: Code)?/g, 'DeepSeek');
+  if (provider === 'agy') return text.replace(/Claude(?: Code)?/g, 'Antigravity');
   return text;
 }
 
@@ -108,6 +109,14 @@ export class AgentTracker {
         s.mood = 'thinking';
         s.turnStart = e.t;
         s.tools = 0;
+        break;
+      case 'PreInvocation':
+        // Antigravity 没有 UserPromptSubmit：一轮里第一次调模型就当开始想了
+        if (s.turnStart === null) {
+          s.mood = 'thinking';
+          s.turnStart = e.t;
+          s.tools = 0;
+        }
         break;
       case 'PreToolUse':
         s.mood = 'working';

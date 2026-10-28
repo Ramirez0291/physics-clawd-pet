@@ -5,6 +5,9 @@ import { type AgentProvider, agentText, folderName } from '../claude/agent';
 import type { ClaudeLive } from '../overlay/claude';
 import type { AssistantStatus } from '../overlay/companion';
 import {
+  agyInstall,
+  agyStatus,
+  agyUninstall,
   type CcStatus,
   ccInstall,
   ccStatus,
@@ -331,6 +334,7 @@ async function main() {
     claude: { status: ccStatus, install: ccInstall, uninstall: ccUninstall },
     codex: { status: codexStatus, install: codexInstall, uninstall: codexUninstall },
     dsh: { status: dshStatus, install: dshInstall, uninstall: dshUninstall },
+    agy: { status: agyStatus, install: agyInstall, uninstall: agyUninstall },
   };
   let refreshing = 0;
   const permBox = $<HTMLInputElement>('ccPermission');
@@ -365,7 +369,7 @@ async function main() {
     toggle.textContent = h.installed ? (h.current ? W.ccDisable : W.ccReinstall) : W.ccEnable;
     toggle.className = h.installed && h.current ? '' : 'primary';
     toggle.disabled = !!cc.bridge_error && !h.installed;
-    $('ccHint').textContent = (provider === 'codex' ? W.codexHint : provider === 'dsh' ? W.dshHint : W.ccHint)(h.settings_path);
+    $('ccHint').textContent = (provider === 'codex' ? W.codexHint : provider === 'dsh' ? W.dshHint : provider === 'agy' ? W.agyHint : W.ccHint)(h.settings_path);
     const permLabel = permBox.parentElement?.querySelector('span');
     if (permLabel) permLabel.textContent = linkText(W.ccPermission);
 
@@ -406,9 +410,10 @@ async function main() {
 
   providerSelect.onchange = () => {
     const v = providerSelect.value;
-    provider = v === 'codex' || v === 'dsh' ? v : 'claude';
+    provider = v === 'codex' || v === 'dsh' || v === 'agy' ? v : 'claude';
     cc = null;
-    permBox.checked = true;
+    // Antigravity 没有权限请求事件，勾上就是每条 shell 命令都等气泡，默认不勾
+    permBox.checked = provider !== 'agy';
     $<HTMLButtonElement>('ccToggle').disabled = true;
     void refreshClaude();
   };

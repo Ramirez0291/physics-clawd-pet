@@ -3,6 +3,7 @@ artifacts/
 dist/
 # 宣传视频（不开源）
 promo.html
+promo-dsh.html
 src/promo/
 scripts/render-promo.mjs
 vite.promo.config.ts

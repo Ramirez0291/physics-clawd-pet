@@ -69,7 +69,7 @@ fn is_ours(h: &Value) -> bool {
         .is_some_and(|s| s.contains(MARKER))
 }
 
-fn read(path: &Path) -> Result<Map<String, Value>, String> {
+pub(crate) fn read(path: &Path) -> Result<Map<String, Value>, String> {
     if !path.exists() {
         return Ok(Map::new());
     }
@@ -105,7 +105,7 @@ fn strip(settings: &mut Map<String, Value>) {
     }
 }
 
-fn write(path: &Path, settings: Map<String, Value>) -> Result<(), String> {
+pub(crate) fn write(path: &Path, settings: Map<String, Value>) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }

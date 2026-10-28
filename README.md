@@ -6,9 +6,9 @@
 **一只物理效果夸张到离谱的桌宠。**
 
 Grab it, fling it across your screen, and watch it tumble, superhero-land, or stick to the wall like Spider-Man.
-It also keeps an eye on your AI agent: Claude Code, Codex or DeepSeek Harness.<br>
+It also keeps an eye on your AI agent: Claude Code, Codex, DeepSeek Harness or Antigravity.<br>
 把它拎起来甩出去：翻滚落地、超级英雄式砸地，或者像蜘蛛侠一样贴在屏幕边上。
-它还会盯着你的 AI 干活：Claude Code、Codex、DeepSeek Harness 都行。
+它还会盯着你的 AI 干活：Claude Code、Codex、DeepSeek Harness、Antigravity 都行。
 
 [![Release](https://img.shields.io/github/v/release/Ramirez0291/physics-clawd-pet?include_prereleases&label=release)](https://github.com/Ramirez0291/physics-clawd-pet/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20%7C%20macOS-0078D6)
@@ -58,15 +58,16 @@ It also keeps an eye on your AI agent: Claude Code, Codex or DeepSeek Harness.<b
 
 **It works with your AI agent** (optional, off by default)
 
-Turn it on from **Assistant → Claude Code / Codex / DeepSeek**. While the agent thinks, a "…" bubble appears; while it works, the pet types on a laptop; it sweeps while context is compacted, gets zapped by errors, drops a mini pet for every subagent, and cartwheels with confetti when a turn finishes. When the agent asks for permission, the pet runs to that window and stomps, and you can answer **Allow / Deny** right on its bubble.
+Turn it on from **Assistant → Claude Code / Codex / DeepSeek / Antigravity**. While the agent thinks, a "…" bubble appears; while it works, the pet types on a laptop; it sweeps while context is compacted, gets zapped by errors, drops a mini pet for every subagent, and cartwheels with confetti when a turn finishes. When the agent asks for permission, the pet runs to that window and stomps, and you can answer **Allow / Deny** right on its bubble.
 
 | | How it connects | Approve from the bubble |
 | --- | --- | --- |
 | **Claude Code** | Adds hooks to `~/.claude/settings.json` | Yes; answer in the terminal and the bubble goes away |
 | **Codex** | Adds hooks to `$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`); trust them with `/hooks` in Codex | Yes, or reminders only |
 | **DeepSeek Harness** | Installs a small plugin in `~/.dsh/clawd-pet/` and a marked block in `~/.dsh/cordis.patch.yml`; loaded live, no restart | Yes; the bubble and DSH's own panel race, and the first answer wins |
+| **Antigravity** (app, IDE, `agy` CLI) | Adds a `clawd-pet` hook set to `~/.gemini/config/hooks.json` plus `clawd-pet-hook.cmd` next to it; start a new conversation after enabling | Optional; Antigravity has no permission event, so every shell command waits for the bubble |
 
-Your own hooks and settings are left alone, the first change backs the file up as `*.clawd-backup`, turning a link off removes only the pet's entries, and the Windows uninstaller cleans them all up. Each reaction can be turned off separately, and all three links can run at once. Cloud sessions and remote/WSL runtimes can't reach the pet's localhost bridge.
+Your own hooks and settings are left alone, the first change backs the file up as `*.clawd-backup`, turning a link off removes only the pet's entries, and the Windows uninstaller cleans them all up. Each reaction can be turned off separately, and all four links can run at once. Cloud sessions and remote/WSL runtimes can't reach the pet's localhost bridge.
 
 ### Characters
 
@@ -183,15 +184,16 @@ The engine code is released under the [MIT License](LICENSE). The characters are
 
 **盯着你的 AI 干活**（可选，默认关闭）
 
-在 **小助手 → Claude Code / Codex / DeepSeek** 里开启。AI 思考时头顶冒"……"，干活时敲电脑，压缩上下文时扫地，出错被电一下，每派一个子代理就掉下来一只迷你小人，一轮干完后空翻撒彩纸。AI 要权限时，它会跑到那个窗口上跺脚，气泡上直接点 **允许 / 拒绝**。
+在 **小助手 → Claude Code / Codex / DeepSeek / Antigravity** 里开启。AI 思考时头顶冒"……"，干活时敲电脑，压缩上下文时扫地，出错被电一下，每派一个子代理就掉下来一只迷你小人，一轮干完后空翻撒彩纸。AI 要权限时，它会跑到那个窗口上跺脚，气泡上直接点 **允许 / 拒绝**。
 
 | | 怎么接上的 | 能在气泡上批准吗 |
 | --- | --- | --- |
 | **Claude Code** | 往 `~/.claude/settings.json` 里加 hooks | 能；在终端里答了，气泡自动收起 |
 | **Codex** | 往 `$CODEX_HOME/hooks.json`（默认 `~/.codex/hooks.json`）里加 hooks，需要在 Codex 里用 `/hooks` 信任 | 能，也可以只提醒 |
 | **DeepSeek Harness** | 在 `~/.dsh/clawd-pet/` 装个小插件，并在 `~/.dsh/cordis.patch.yml` 里加一段带标记的配置；自动加载，不用重启 | 能；气泡和 DSH 自己的审批面板哪边先答算哪边 |
+| **Antigravity**（App、IDE、`agy` CLI） | 往 `~/.gemini/config/hooks.json` 里加一组 `clawd-pet` hooks，旁边放个 `clawd-pet-hook.cmd`；开启后新开一个对话 | 可选；Antigravity 没有权限事件，开了以后每条 shell 命令都先等气泡 |
 
-不动你自己的 hooks 和配置，第一次修改前备份成 `*.clawd-backup`，关闭联动只删桌宠自己的条目，Windows 卸载时也会一并清理。每种反应都能单独关，三种联动可以同时开。云端会话和远程 / WSL 运行环境连不到本机的桥接服务。
+不动你自己的 hooks 和配置，第一次修改前备份成 `*.clawd-backup`，关闭联动只删桌宠自己的条目，Windows 卸载时也会一并清理。每种反应都能单独关，四种联动可以同时开。云端会话和远程 / WSL 运行环境连不到本机的桥接服务。
 
 ### 形象
 

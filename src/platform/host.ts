@@ -8,9 +8,9 @@ import { pick } from '../assistant/i18n';
 /** 只在浏览器预览里会看到的提示 */
 const PREVIEW_NO_LINK = () =>
   pick({
-    zh: '浏览器预览里不能联动 Claude Code / Codex / DeepSeek Harness',
-    ja: 'ブラウザのプレビューではClaude Code / Codex / DeepSeek Harnessと連携できません',
-    en: 'Claude Code / Codex / DeepSeek Harness linking is not available in the browser preview',
+    zh: '浏览器预览里不能联动 Claude Code / Codex / DeepSeek Harness / Antigravity',
+    ja: 'ブラウザのプレビューではClaude Code / Codex / DeepSeek Harness / Antigravityと連携できません',
+    en: 'Claude Code / Codex / DeepSeek Harness / Antigravity linking is not available in the browser preview',
   });
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -232,6 +232,28 @@ export async function dshUninstall(): Promise<void> {
   if (!isTauri) return;
   const { invoke } = await import('@tauri-apps/api/core');
   await invoke('dsh_uninstall');
+}
+
+export async function agyStatus(): Promise<CcStatus> {
+  if (!isTauri) {
+    const status = await ccStatus();
+    return { ...status, hooks: { ...status.hooks, settings_path: '~/.gemini/config/hooks.json' } };
+  }
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<CcStatus>('agy_status');
+}
+
+/** 往 Antigravity 的全局 hooks（~/.gemini/config/hooks.json）里装上桌宠 */
+export async function agyInstall(permission: boolean): Promise<void> {
+  if (!isTauri) throw new Error(PREVIEW_NO_LINK());
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('agy_install', { permission });
+}
+
+export async function agyUninstall(): Promise<void> {
+  if (!isTauri) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('agy_uninstall');
 }
 
 /** 权限气泡上的选择：allow / deny / pass（交还终端） */

@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, Webvi
 
 mod assist;
 mod claude;
+mod agy;
 mod codex;
 mod desktop;
 mod dsh;
@@ -26,12 +27,18 @@ pub fn cli(args: &[String]) -> Option<i32> {
     if args.iter().any(|a| a == "--clawd-pet-hook" || a == codex::MARKER) {
         return Some(claude::hook_main(args));
     }
+    if args.iter().any(|a| a == agy::MARKER) {
+        return Some(agy::hook_main(args));
+    }
     if args.iter().any(|a| a == "--remove-claude-hooks") {
         // 卸载程序调用：把装进 Claude Code 设置里的 hooks 删掉
         return Some(if claude::uninstall().is_ok() { 0 } else { 1 });
     }
     if args.iter().any(|a| a == "--remove-codex-hooks") {
         return Some(if codex::uninstall().is_ok() { 0 } else { 1 });
+    }
+    if args.iter().any(|a| a == "--remove-agy-hooks") {
+        return Some(if agy::uninstall().is_ok() { 0 } else { 1 });
     }
     if args.iter().any(|a| a == "--remove-dsh-plugin") {
         return Some(if dsh::uninstall().is_ok() { 0 } else { 1 });
@@ -338,6 +345,26 @@ fn dsh_uninstall() -> Result<(), String> {
     dsh::uninstall()
 }
 
+#[tauri::command]
+fn agy_status(bridge: State<Arc<claude::Bridge>>, token: State<BridgeToken>) -> CcStatus {
+    CcStatus {
+        hooks: agy::status(&token.0),
+        port: claude::PORT,
+        bridge_error: bridge.error.lock().unwrap().clone(),
+        last_event: bridge.last_agy_event.load(std::sync::atomic::Ordering::Relaxed),
+    }
+}
+
+#[tauri::command]
+fn agy_install(token: State<BridgeToken>, permission: bool) -> Result<(), String> {
+    agy::install(&token.0, permission)
+}
+
+#[tauri::command]
+fn agy_uninstall() -> Result<(), String> {
+    agy::uninstall()
+}
+
 /// 权限气泡上的按钮：allow / deny / pass（交还终端）
 #[tauri::command]
 fn cc_decide(bridge: State<Arc<claude::Bridge>>, id: u64, behavior: String) -> bool {
@@ -625,6 +652,9 @@ pub fn run() {
             dsh_status,
             dsh_install,
             dsh_uninstall,
+            agy_status,
+            agy_install,
+            agy_uninstall,
             cc_decide
         ])
         .setup(|app| {
@@ -644,6 +674,10 @@ pub fn run() {
             let st = dsh::status(&token);
             if st.installed && !st.current {
                 let _ = dsh::install(&token, st.permission);
+            }
+            let st = agy::status(&token);
+            if st.installed && !st.current {
+                let _ = agy::install(&token, st.permission);
             }
             app.manage(bridge);
             app.manage(BridgeToken(token));

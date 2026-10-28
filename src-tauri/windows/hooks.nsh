@@ -4,4 +4,5 @@
   ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --remove-claude-hooks'
   ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --remove-codex-hooks'
   ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --remove-dsh-plugin'
+  ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --remove-agy-hooks'
 !macroend

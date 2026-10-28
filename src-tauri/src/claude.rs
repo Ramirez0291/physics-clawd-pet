@@ -82,26 +82,11 @@ pub fn hook_main(args: &[String]) -> i32 {
     let _ = std::io::stdin().take(16 * 1024 * 1024).read_to_string(&mut input);
     // 经过 PowerShell 管道转来的输入可能带 UTF-8 BOM
     let Ok(v) = serde_json::from_str::<Value>(input.trim_start_matches('\u{feff}')) else { return 0 };
-    let mut msg = if codex {
+    let msg = if codex {
         crate::codex::summarize(&v, args.iter().any(|a| a == crate::codex::OBSERVE_PERMISSION))
     } else { summarize(&v) };
-    msg.insert("token".into(), Value::String(token));
-    msg.insert("ancestors".into(), json!(platform::ancestor_pids()));
     let is_permission = msg.get("event").and_then(Value::as_str) == Some("PermissionRequest");
-
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(400)) else { return 0 };
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(3)));
-    let mut line = Value::Object(msg).to_string();
-    line.push('\n');
-    if stream.write_all(line.as_bytes()).is_err() {
-        return 0;
-    }
-    let wait = if is_permission { PERMISSION_WAIT + Duration::from_secs(5) } else { Duration::from_secs(3) };
-    let _ = stream.set_read_timeout(Some(wait));
-    let mut reply = String::new();
-    let _ = BufReader::new(&stream).take(MAX_LINE).read_line(&mut reply);
-    let reply = reply.trim();
+    let reply = relay(msg, port, token);
     // 只有权限请求的决定需要交给 Claude Code；其他事件回的是 "ok"
     if is_permission && reply.starts_with('{') {
         let mut out = std::io::stdout();
@@ -109,6 +94,28 @@ pub fn hook_main(args: &[String]) -> i32 {
         let _ = out.flush();
     }
     0
+}
+
+/// 把精简过的事件交给宠物，返回宠物回的那一行（连不上 / 没回就是空串）。
+/// 权限请求会一直等到气泡上有了决定
+pub(crate) fn relay(mut msg: Map<String, Value>, port: u16, token: String) -> String {
+    msg.insert("token".into(), Value::String(token));
+    msg.insert("ancestors".into(), json!(platform::ancestor_pids()));
+    let is_permission = msg.get("event").and_then(Value::as_str) == Some("PermissionRequest");
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(400)) else { return String::new() };
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(3)));
+    let mut line = Value::Object(msg).to_string();
+    line.push('\n');
+    if stream.write_all(line.as_bytes()).is_err() {
+        return String::new();
+    }
+    let wait = if is_permission { PERMISSION_WAIT + Duration::from_secs(5) } else { Duration::from_secs(3) };
+    let _ = stream.set_read_timeout(Some(wait));
+    let mut reply = String::new();
+    let _ = BufReader::new(&stream).take(MAX_LINE).read_line(&mut reply);
+    reply.trim().to_string()
 }
 
 /// 从 hook 输入里挑出宠物要用的字段，大的内容（文件正文、工具输出）一律不带
@@ -160,6 +167,12 @@ fn tool_summary(name: &str, input: Option<&Value>) -> String {
     let text = match name {
         "Bash" | "PowerShell" => s("command").map(str::to_string),
         "apply_patch" => s("command").map(str::to_string),
+        // Antigravity 的原生工具
+        "run_command" => s("CommandLine").map(str::to_string),
+        "write_to_file" | "replace_file_content" | "multi_replace_file_content" => s("TargetFile").map(str::to_string),
+        "view_file" => s("AbsolutePath").map(str::to_string),
+        "read_url_content" => s("Url").map(str::to_string),
+        "search_web" => s("query").map(str::to_string),
         "Edit" | "Write" | "MultiEdit" | "Read" | "NotebookEdit" => {
             s("file_path").or(s("notebook_path")).map(str::to_string)
         }
@@ -190,6 +203,7 @@ pub struct Bridge {
     pub last_event: AtomicU64,
     pub last_codex_event: AtomicU64,
     pub last_dsh_event: AtomicU64,
+    pub last_agy_event: AtomicU64,
 }
 
 impl Bridge {
@@ -202,6 +216,7 @@ impl Bridge {
             last_event: AtomicU64::new(0),
             last_codex_event: AtomicU64::new(0),
             last_dsh_event: AtomicU64::new(0),
+            last_agy_event: AtomicU64::new(0),
         })
     }
 
@@ -266,6 +281,7 @@ impl Bridge {
         let last = match msg.get("provider").and_then(Value::as_str) {
             Some("codex") => &self.last_codex_event,
             Some("dsh") => &self.last_dsh_event,
+            Some("agy") => &self.last_agy_event,
             _ => &self.last_event,
         };
         last.store(now_ms(), Ordering::Relaxed);

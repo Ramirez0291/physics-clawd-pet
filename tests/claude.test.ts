@@ -115,6 +115,22 @@ function run(pet: Pet, seconds: number, until?: (p: Pet) => boolean) {
   return events;
 }
 
+describe('Antigravity 会话', () => {
+  it('第一次调模型就开始想，后面的调用不重置这一轮', () => {
+    const tr = new AgentTracker();
+    const at = (event: string, t: number, extra: Partial<CcEvent> = {}): CcEvent => ({ provider: 'agy', event, session_id: 'agy:c', cwd: 'E:/p', t, ...extra });
+    tr.handle(at('SessionStart', 0));
+    expect(tr.mood(0)).toBe('idle');
+    tr.handle(at('PreInvocation', 1000));
+    expect(tr.mood(1000)).toBe('thinking');
+    tr.handle(at('PreToolUse', 2000, { tool_name: 'run_command' }));
+    tr.handle(at('PreInvocation', 3000));
+    expect(tr.mood(3000)).toBe('working');
+    const done = tr.handle(at('Stop', 9000)).find((r) => r.kind === 'done');
+    expect(done).toMatchObject({ turnMs: 8000, tools: 1, provider: 'agy' });
+  });
+});
+
 describe('跟着 Claude Code 动', () => {
   it('干活时敲电脑，收工就合上', () => {
     // 关掉随机小动作：不然收工后发呆一会儿可能又自己掏出电脑
