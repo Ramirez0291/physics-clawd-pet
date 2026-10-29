@@ -32,7 +32,11 @@ const MODE_NAMES: Record<string, string> = {
   zap: '被电',
   knock: '跺脚',
   sweep: '扫地',
+  clip: '播片',
+  magic: '魔法',
 };
+/** 播片按钮上的名字（文件名 → 中文） */
+const CLIP_NAMES: Record<string, string> = { ghost: '床单幽灵' };
 const SIDE_NAMES: Record<string, string> = { floor: '地面', ceiling: '天花板', left: '左墙', right: '右墙' };
 const TIER_NAMES: Record<string, string> = {
   soft: '普通',
@@ -178,6 +182,7 @@ async function main() {
       skins: SkinInfo[];
       skin: string;
       actions: string[];
+      clips?: string[];
     }) => {
       connected = true;
       tuning = mergeTuning(DEFAULT_TUNING, s.tuning);
@@ -192,6 +197,16 @@ async function main() {
         b.disabled = act !== 'petted' && !b.hasAttribute('data-cue') && !s.actions.includes(act);
         b.title = b.disabled ? '这个形象不会这个动作' : '';
       }
+      // 播片按钮：当前形象有哪些片就列哪些
+      $('clips').replaceChildren(
+        ...(s.clips ?? []).map((id) => {
+          const b = document.createElement('button');
+          b.textContent = CLIP_NAMES[id] ?? id;
+          b.onclick = () => cmd('act', `clip:${id}`);
+          return b;
+        }),
+      );
+      $('clipBar').hidden = !s.clips?.length;
       renderAll();
     },
   );

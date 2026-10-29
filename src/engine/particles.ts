@@ -31,6 +31,10 @@ const NOTE = ['#f5c542', '#79c0ff', '#ff9d8f'];
 const CONFETTI = ['#f0524f', '#f5c542', '#2fbf71', '#79c0ff', '#c084fc', '#ff9d8f', '#fffbe6'];
 const SPARK = ['#fff4b8', '#f5c542', '#ffffff', '#9fd8ff'];
 const SMOKE = ['#5b5752', '#7d7770', '#3f3c39'];
+/** 魔法激光的火花：和激光一个色系，夹点金色 */
+const MAGIC = ['#f15bb5', '#c77dff', '#fff6fb', '#fee440'];
+/** 魔法炸开后飘的紫烟 */
+const MAGIC_SMOKE = ['#6a4c93', '#8e6cc9', '#b79ce6'];
 
 const DUST_COUNT: Record<ImpactTier, number> = {
   soft: 3,
@@ -67,6 +71,9 @@ export class ParticleSystem {
     else if (ev.type === 'smoke') this.smoke(ev.x, ev.y);
     else if (ev.type === 'sweep') this.sweep(ev.x, ev.y, ev.dir);
     else if (ev.type === 'poof') this.poof(ev.x, ev.y);
+    else if (ev.type === 'magic') this.magic(ev.x, ev.y);
+    else if (ev.type === 'charge') this.charge(ev.x, ev.y);
+    else if (ev.type === 'boom') this.boom(ev.x, ev.y, ev.big);
   }
 
   /** 庆祝：一把彩纸沿法线方向往外喷，慢悠悠飘下来 */
@@ -112,6 +119,93 @@ export class ParticleSystem {
         color: SPARK[Math.floor(r() * SPARK.length)],
         drag: 4,
         gravity: 0,
+      });
+    }
+  }
+
+  /** 激光打中的地方：粉紫色火花往四处溅，飞得比电火花远一点、有大有小 */
+  private magic(x: number, y: number) {
+    const r = this.rng;
+    for (let i = 0; i < 5; i++) {
+      const a = r() * Math.PI * 2;
+      const sp = rand(300, 1100, r);
+      const life = rand(0.15, 0.4, r);
+      this.push({
+        kind: 'spark',
+        x,
+        y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life,
+        maxLife: life,
+        size: r() < 0.35 ? 2 : 1,
+        color: MAGIC[Math.floor(r() * MAGIC.length)],
+        drag: 4,
+        gravity: 600,
+      });
+    }
+  }
+
+  /** 前摇聚能：一圈光点从四周往杖尖收，正好在消失的时候到 */
+  private charge(x: number, y: number) {
+    const r = this.rng;
+    for (let i = 0; i < 2; i++) {
+      const a = r() * Math.PI * 2;
+      const dist = rand(45, 80, r);
+      const life = rand(0.22, 0.32, r);
+      this.push({
+        kind: 'spark',
+        x: x + Math.cos(a) * dist,
+        y: y + Math.sin(a) * dist,
+        vx: (-Math.cos(a) * dist) / life,
+        vy: (-Math.sin(a) * dist) / life,
+        life,
+        maxLife: life,
+        size: 1,
+        color: MAGIC[Math.floor(r() * MAGIC.length)],
+        drag: 0,
+        gravity: 0,
+      });
+    }
+  }
+
+  /** 炸开：一大圈火花往外喷；大的（激光打中）再冒几团紫烟 */
+  private boom(x: number, y: number, big: boolean) {
+    const r = this.rng;
+    const n = big ? 28 : 12;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + r() * 0.3;
+      const sp = big ? rand(500, 1500, r) : rand(300, 800, r);
+      const life = rand(0.25, big ? 0.6 : 0.35, r);
+      this.push({
+        kind: 'spark',
+        x,
+        y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life,
+        maxLife: life,
+        size: big && r() < 0.5 ? 3 : r() < 0.5 ? 2 : 1,
+        color: MAGIC[Math.floor(r() * MAGIC.length)],
+        drag: 3.5,
+        gravity: big ? 700 : 0,
+      });
+    }
+    if (!big) return;
+    for (let i = 0; i < 6; i++) {
+      const life = rand(0.7, 1.2, r);
+      this.push({
+        kind: 'smoke',
+        x: x + rand(-16, 16, r),
+        y: y + rand(-16, 16, r),
+        vx: rand(-90, 90, r),
+        vy: rand(-140, -40, r),
+        life,
+        maxLife: life,
+        size: rand(2.5, 4, r),
+        color: MAGIC_SMOKE[Math.floor(r() * MAGIC_SMOKE.length)],
+        drag: 1.5,
+        gravity: -30,
       });
     }
   }

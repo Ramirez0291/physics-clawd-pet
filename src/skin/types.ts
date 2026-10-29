@@ -119,6 +119,8 @@ export interface Skin extends Omit<SkinDef, 'parts' | 'render' | 'actions'> {
   bodyBox: { x: number; y: number; w: number; h: number };
   /** 眼睛部件的包围盒，没有眼睛为 null。腮红、吃金币的嘴都按它定位 */
   eyeBox: { x: number; y: number; w: number; h: number } | null;
+  /** 播片：名字 → GIF 地址。内置皮肤由 registry 从 skins/<目录>/clips/*.gif 收集 */
+  clips?: Record<string, string>;
 }
 
 function boxOf(parts: SkinPartDef[]) {

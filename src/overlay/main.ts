@@ -24,6 +24,7 @@ import {
   saveTuning,
   type ScreenInfo,
 } from '../platform/host';
+import { type Clip, loadClip } from '../render/clips';
 import { Renderer } from '../render/renderer';
 import { SKINS, findSkin } from '../skin/registry';
 import { Bubbles } from './bubbles';
@@ -122,9 +123,27 @@ async function main() {
     dpr: window.devicePixelRatio || 1,
     particles: !!tuning.particles,
   }));
+  /** 当前皮肤解码好了的播片（解码是异步的，没解好的点了也不播） */
+  let clips = new Map<string, Clip>();
+  const loadClips = () => {
+    const mine = skin;
+    clips = new Map();
+    for (const [id, url] of Object.entries(mine.clips ?? {})) {
+      void loadClip(url).then((c) => {
+        if (!c || skin !== mine) return;
+        clips.set(id, c);
+        renderer.setClip(id, c);
+      });
+    }
+  };
+  const playClip = (id: string) => {
+    const c = clips.get(id);
+    return !!c && pet.playClip(id, c.duration);
+  };
   /** 皮肤决定碰撞盒、画风（像素会量化大小）、会做的小动作和毛团颜色 */
   const applySkin = () => {
     renderer.setSkin(skin);
+    loadClips();
     pet.setGrid(skin.grid, { pixelArt: skin.pixelArt, actions: skin.actions });
     minis.restyle();
     particles.fluffColor = skin.palette.body ?? skin.parts[0].hex;
@@ -283,6 +302,17 @@ async function main() {
   void companion.start();
   new ClaudeLink(bus, pet, bubbles, minis, () => companion.data.claude).start();
 
+  // ---------- 万圣节彩蛋：10 月 31 日，闲着的时候时不时戴上魔法帽放激光，或者披床单扮鬼 ----------
+
+  setInterval(() => {
+    const d = new Date();
+    if (d.getMonth() !== 9 || d.getDate() !== 31 || dndHidden || Math.random() > 1 / 20) return;
+    // 只在没事干的时候：不打断提醒、不抢 Claude Code 联动的戏
+    if (pet.mode !== 'idle' || pet.side !== 'floor' || pet.attentive || pet.agentMood !== 'idle') return;
+    if (clips.has('ghost') && Math.random() < 0.4) playClip('ghost');
+    else pet.cue('magic');
+  }, 30_000);
+
   // ---------- 鼠标 ----------
 
   let drag: { id: number; downAt: number; x0: number; y0: number; moved: number } | null = null;
@@ -337,6 +367,7 @@ async function main() {
       skins: skinList,
       skin: skin.id,
       actions: skin.actions,
+      clips: Object.keys(skin.clips ?? {}),
     });
 
   bus.on('debug-hello', () => {
@@ -400,6 +431,8 @@ async function main() {
           minis.spawn(`debug-${performance.now()}`);
         } else if (msg.arg === 'mini-clear') {
           minis.clear();
+        } else if (msg.arg?.startsWith('clip:')) {
+          playClip(msg.arg.slice(5));
         }
         break;
     }
