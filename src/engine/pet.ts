@@ -55,7 +55,9 @@ export type Mode =
   | 'sign' // 日程/待办：跑到屏幕中间举牌子
   | 'zap' // Claude Code 出错：被电得直哆嗦，然后摔倒
   | 'knock' // Claude Code 等你批准：跑到终端窗口上跺脚
-  | 'sweep'; // Claude Code 压缩上下文：拿扫帚扫地
+  | 'sweep' // Claude Code 压缩上下文：拿扫帚扫地
+  | 'magic' // 万圣节彩蛋：戴上魔法帽，掏出魔杖放激光
+  | 'clip'; // 播片：一段画好的 GIF 顶替程序化的样子（见 render/clips.ts）
 
 /** 发呆时会随机做的小动作。皮肤在 skin.json 的 actions 里挑自己会做哪些。 */
 export type Activity = 'laptop' | 'stocks' | 'coin' | 'shake';
@@ -77,8 +79,8 @@ export const COIN_BITES = [1.35, 1.8, 2.25];
 export const STOCK_LEN = 20;
 
 /** 提醒动作（小助手、Claude Code 联动触发的，任何皮肤都会） */
-export type Cue = 'chime' | 'stretch' | 'sign' | 'celebrate' | 'zap' | 'knock';
-export const CUES: readonly Cue[] = ['chime', 'stretch', 'sign', 'celebrate', 'zap', 'knock'];
+export type Cue = 'chime' | 'stretch' | 'sign' | 'celebrate' | 'zap' | 'knock' | 'magic';
+export const CUES: readonly Cue[] = ['chime', 'stretch', 'sign', 'celebrate', 'zap', 'knock', 'magic'];
 /** Claude Code 正在干什么：宠物据此决定发呆时做什么（思考 = 原地发呆冒省略号，干活 = 敲电脑，压缩 = 扫地） */
 export type AgentMood = 'idle' | 'thinking' | 'working' | 'compacting';
 /** 举的牌子上画什么：日历 / 待办清单 */
@@ -101,6 +103,51 @@ export const KNOCK_TIME = 2.4;
 export const KNOCK_BEATS = [0.35, 0.7, 1.05, 1.5, 1.85];
 /** 扫地：一扫的时长 */
 export const SWEEP_STROKE = 0.55;
+/**
+ * 魔法的时间轴（秒）：帽子掉到头上（到 HAT）→ 掏出魔杖（到 DRAW）→ 前摇：魔杖举过头顶来回抡、
+ * 杖尖聚能，最后 THRUST 秒往前一戳（到 FIRE）→ 放激光（到 FIRE_END）→ 得意一下，
+ * 收起魔杖（最后 STOW 秒），帽子"噗"地消失
+ */
+export const MAGIC_HAT = 0.4;
+export const MAGIC_DRAW = 0.8;
+export const MAGIC_THRUST = 0.15;
+export const MAGIC_FIRE = 1.95;
+export const MAGIC_FIRE_END = 3.35;
+export const MAGIC_STOW = 0.35;
+export const MAGIC_TIME = 4.2;
+/** 激光从杖尖射到目标要多久；射到的那一下炸一次 */
+export const MAGIC_GROW = 0.1;
+/** 激光打中的地方每隔多久冒一把火花；前摇时每隔多久往杖尖聚一把光点 */
+const MAGIC_SPARK = 0.05;
+const MAGIC_CHARGE = 0.035;
+/** 魔杖能指的角度范围（弧度，0 = 水平朝前，负的往上） */
+const AIM_UP = -1.1;
+const AIM_DOWN = 0.3;
+/** 没有可瞄的光标时：稍微往上斜着射 */
+const AIM_DEFAULT = -0.15;
+/** 前摇：魔杖在头顶上来回抡（中心略往后仰），每秒抡几个来回 */
+const SWIRL_CENTER = -1.9;
+const SWIRL_AMP = 0.7;
+const SWIRL_RATE = 2.2;
+
+/** 前摇时握魔杖的手抬高几格：抬起来抡，往前一戳时放下来 */
+export function wandLift(tm: number): number {
+  const up = clamp((tm - MAGIC_DRAW) / 0.25, 0, 1);
+  const down = clamp((tm - (MAGIC_FIRE - MAGIC_THRUST)) / MAGIC_THRUST, 0, 1);
+  return 2.5 * up * (1 - down);
+}
+
+/**
+ * 魔杖：握在 dir 那侧的手里（手在身体外侧、半身高，前摇时抬高 lift 格），杖身长 14 道具像素，指向 aim。
+ * 返回道具像素坐标（1/3 格，相对网格左上角）：握手处 h 和杖尖 t。姿势和激光都按这个算。
+ */
+export function wandGeom(grid: readonly [number, number], dir: 1 | -1, aim: number, lift = 0) {
+  const hx = (grid[0] / 2 + dir * (grid[0] / 2 + 0.2)) * 3;
+  const hy = (grid[1] * 0.45 - lift) * 3;
+  const L = 14;
+  return { hx, hy, tx: hx + dir * Math.cos(aim) * L, ty: hy + Math.sin(aim) * L };
+}
+
 /** 跟着 Claude Code 干活的小动作，时长先设成"一直"，Claude 收工时再收尾 */
 const UNTIL_DONE = 1e6;
 
@@ -124,7 +171,10 @@ export type PetEvent =
   | { type: 'spark'; x: number; y: number }
   | { type: 'smoke'; x: number; y: number }
   | { type: 'sweep'; x: number; y: number; dir: number }
-  | { type: 'poof'; x: number; y: number };
+  | { type: 'poof'; x: number; y: number }
+  | { type: 'magic'; x: number; y: number }
+  | { type: 'charge'; x: number; y: number }
+  | { type: 'boom'; x: number; y: number; big: boolean };
 
 /** 一次投掷的初始条件，用于"重放上次投掷"做 A/B 对比 */
 export interface LaunchState {
@@ -171,6 +221,8 @@ const GROUNDED: ReadonlySet<Mode> = new Set([
   'zap',
   'knock',
   'sweep',
+  'clip',
+  'magic',
 ]);
 /** 这些状态下光标在头顶来回蹭就算摸摸 */
 const RUBBABLE: ReadonlySet<Mode> = new Set(['idle', 'walk', 'land', 'petted', 'laptop', 'stocks', 'coin', 'shake']);
@@ -295,6 +347,15 @@ export class Pet {
   attentive = false;
   /** Claude Code 正在干什么（见 setAgentMood） */
   agentMood: AgentMood = 'idle';
+  /** 正在播的片（mode 为 'clip' 时有效） */
+  clip: string | null = null;
+  /** 魔法：魔杖指的角度（见 wandGeom），以及激光打到哪儿（没在放激光为 null） */
+  aim = 0;
+  beamEnd: Vec2 | null = null;
+  /** 魔法进行到哪一步了（0 开始 → 1 帽子落下 → 2 开火 → 3 激光打中 → 4 收尾那一炸），以及冒了几把火花/光点 */
+  private magicStage = 0;
+  private magicSparks = 0;
+  private magicCharges = 0;
   private seekTime = 0;
   /** 摸摸：光标在头顶的移动记录 */
   private rub = { x: NaN, y: NaN, dir: 0, flips: [] as number[], lastAt: -Infinity, heart: 0 };
@@ -517,6 +578,22 @@ export class Pet {
   }
 
   /**
+   * 播一段片（duration 秒），播完回到发呆。只在地上站着、没在忙提醒动作时播，返回是否播了。
+   * 开头结尾各冒一团烟，盖住"换成另一套画"的那一下。
+   */
+  playClip(id: string, duration: number): boolean {
+    if (this.side !== 'floor' || !CUEABLE.has(this.mode) || this.fleeing || this.pendingCue) return false;
+    this.clip = id;
+    this.setMode('clip', duration);
+    this.poofBody();
+    return true;
+  }
+
+  private poofBody() {
+    this.events.push({ type: 'poof', x: this.pos.x, y: this.pos.y });
+  }
+
+  /**
    * Claude Code 的状态变了。发呆的时候按它来：干活就敲电脑、压缩就扫地、思考就原地等着。
    * 收工时把"一直做下去"的电脑/扫帚收起来。
    */
@@ -573,6 +650,22 @@ export class Pet {
         this.bites = 0;
         this.setMode('zap', ZAP_TIME);
         this.emote = { kind: '!', t: 0 };
+        return true;
+      case 'magic':
+        // 要站在地上施法：在墙上/天花板上先跳下来
+        if (this.side !== 'floor') {
+          this.leaveSurface();
+          return true;
+        }
+        this.pendingCue = null;
+        this.magicStage = 0;
+        this.magicSparks = 0;
+        this.magicCharges = 0;
+        // 朝着光标那边；没有光标就朝空地多的那边
+        this.dir = this.cursor ? (this.cursor.x >= this.pos.x ? 1 : -1) : this.laptopSide();
+        this.aim = 1.2;
+        this.beamEnd = null;
+        this.setMode('magic', MAGIC_TIME);
         return true;
     }
 
@@ -948,12 +1041,25 @@ export class Pet {
       case 'sweep':
         this.stepSweep();
         break;
+      case 'magic':
+        this.stepMagic(dt);
+        break;
+      case 'clip':
+        if (this.modeTime >= this.modeDuration) this.setMode('idle', rand(this.tuning.idleMin, this.tuning.idleMax, this.rng));
+        break;
       default:
         this.stepRecover();
     }
   }
 
   private setMode(m: Mode, duration = 0) {
+    // 播完或者被打断（拎起来、被提醒动作叫走）：再冒一团烟换回来
+    if (this.mode === 'clip' && m !== 'clip') this.poofBody();
+    // 魔法收场（或者被拎走）：帽子"噗"地没了
+    if (this.mode === 'magic' && m !== 'magic') {
+      this.beamEnd = null;
+      this.events.push({ type: 'poof', x: this.pos.x, y: this.pos.y - this.halfH });
+    }
     this.mode = m;
     this.modeTime = 0;
     this.modeDuration = duration;
@@ -1727,6 +1833,127 @@ export class Pet {
       return;
     }
     this.setMode('idle', rand(this.tuning.idleMin, this.tuning.idleMax, this.rng));
+  }
+
+  /**
+   * 魔法：帽子落到头上身子一缩；掏出魔杖跟着光标瞄（光标在身后就朝前斜上方）；
+   * 前摇时魔杖举过头顶来回抡，光点往杖尖聚，最后往前一戳；
+   * 开火时杖尖炸一下、被后坐力往后推一截，激光打到的地方先炸一大下，之后不停冒火花，收尾再炸一下。
+   * 光标在射程里就直接打光标。
+   */
+  private stepMagic(dt: number) {
+    const tm = this.modeTime;
+    const n = NORMAL[this.side];
+    const kick = (k: number) => {
+      this.squashAngle = Math.atan2(n.y, n.x);
+      this.squash = Math.max(this.squash, k);
+      this.squashVel = 0;
+    };
+    if (this.magicStage === 0 && tm >= MAGIC_HAT) {
+      this.magicStage = 1;
+      kick(0.12);
+    }
+
+    const tip = this.wandTip();
+    let want = AIM_DEFAULT;
+    let cursorDist = Infinity;
+    const c = this.cursor;
+    if (c && Math.hypot(c.x - this.pos.x, c.y - this.pos.y) > this.halfW * 2) {
+      const dx = (c.x - tip.x) * this.dir;
+      const dy = c.y - tip.y;
+      const a = Math.atan2(dy, dx);
+      if (dx > 0 && a >= AIM_UP && a <= AIM_DOWN) {
+        want = a;
+        cursorDist = Math.hypot(dx, dy);
+      } else if (dx > 0) {
+        want = clamp(a, AIM_UP, AIM_DOWN);
+      }
+    }
+    if (tm < MAGIC_HAT) {
+      // 还没掏出来：杖尖朝下
+    } else if (tm < MAGIC_DRAW) {
+      this.aim += (want - this.aim) * approach(6, dt);
+    } else if (tm < MAGIC_FIRE - MAGIC_THRUST) {
+      // 前摇：举过头顶来回抡，光点往杖尖聚
+      const swirl = SWIRL_CENTER + SWIRL_AMP * Math.sin((tm - MAGIC_DRAW) * Math.PI * 2 * SWIRL_RATE);
+      this.aim += (swirl - this.aim) * approach(18, dt);
+      while (this.magicCharges < Math.floor((tm - MAGIC_DRAW) / MAGIC_CHARGE)) {
+        this.magicCharges++;
+        this.events.push({ type: 'charge', x: tip.x, y: tip.y });
+      }
+    } else {
+      // 往前一戳，然后跟着目标
+      this.aim += (want - this.aim) * approach(tm < MAGIC_FIRE ? 30 : 12, dt);
+    }
+
+    if (tm >= MAGIC_FIRE && tm < MAGIC_FIRE_END) {
+      const f = tm - MAGIC_FIRE;
+      if (this.magicStage < 2) {
+        this.magicStage = 2;
+        kick(0.25);
+        this.events.push({ type: 'boom', x: tip.x, y: tip.y, big: false });
+        this.events.push({ type: 'impact', tier: 'soft', x: this.pos.x, y: this.pos.y + this.halfH, nx: n.x, ny: n.y, speed: 900 });
+      }
+      const end = this.beamHit(tip, Math.min(cursorDist, this.beamLength(tip)));
+      this.beamEnd = end;
+      if (this.magicStage < 3 && f >= MAGIC_GROW) {
+        this.magicStage = 3;
+        this.events.push({ type: 'boom', x: end.x, y: end.y, big: true });
+      }
+      if (f >= MAGIC_GROW) {
+        while (this.magicSparks < Math.floor((f - MAGIC_GROW) / MAGIC_SPARK)) {
+          this.magicSparks++;
+          this.events.push({ type: 'magic', x: end.x, y: end.y });
+        }
+      }
+      // 后坐力：开火那一下往后滑一截，之后一直被顶着慢慢往后蹭，脚下扬灰
+      const v = 280 * Math.max(0, 1 - f / 0.35) + 25;
+      const before = this.pos.x;
+      this.recoil(v * dt);
+      if (v > 80 && Math.floor(f / 0.07) !== Math.floor((f - dt) / 0.07) && this.pos.x !== before) {
+        this.events.push({ type: 'rolling', x: this.pos.x, y: this.pos.y + this.halfH, vx: -this.dir * v });
+      }
+    } else if (this.beamEnd) {
+      // 收尾：打中的地方最后炸一下
+      if (this.magicStage === 3) this.events.push({ type: 'boom', x: this.beamEnd.x, y: this.beamEnd.y, big: true });
+      this.magicStage = 4;
+      this.beamEnd = null;
+    }
+    if (tm >= this.modeDuration) this.setMode('idle', rand(this.tuning.idleMin, this.tuning.idleMax, this.rng));
+  }
+
+  /** 被后坐力往后推 dist 像素（沿地面，到边就停） */
+  private recoil(dist: number) {
+    const [lo, hi] = this.sRange();
+    this.pos = this.surfacePos('floor', clamp(this.pos.x - this.dir * dist, lo, hi));
+  }
+
+  /** 杖尖的世界坐标（只在地上施法，所以不管旋转） */
+  wandTip(): Vec2 {
+    const w = wandGeom(this.grid, this.dir, this.aim, wandLift(this.modeTime));
+    const c = this.cell;
+    return { x: this.pos.x + (w.tx / 3 - this.grid[0] / 2) * c, y: this.pos.y + (w.ty / 3 - this.grid[1] / 2) * c };
+  }
+
+  private beamDir(): Vec2 {
+    return { x: this.dir * Math.cos(this.aim), y: Math.sin(this.aim) };
+  }
+
+  /** 沿着魔杖指的方向，激光射到所在屏幕边上有多长 */
+  private beamLength(tip: Vec2): number {
+    const s = this.screen;
+    const v = this.beamDir();
+    let t = Infinity;
+    if (v.x > 1e-6) t = Math.min(t, (s.right - tip.x) / v.x);
+    if (v.x < -1e-6) t = Math.min(t, (s.left - tip.x) / v.x);
+    if (v.y > 1e-6) t = Math.min(t, (s.bottom - tip.y) / v.y);
+    if (v.y < -1e-6) t = Math.min(t, (s.top - tip.y) / v.y);
+    return Math.max(0, Number.isFinite(t) ? t : 0);
+  }
+
+  private beamHit(tip: Vec2, length: number): Vec2 {
+    const v = this.beamDir();
+    return { x: tip.x + v.x * length, y: tip.y + v.y * length };
   }
 
   /** 扫地：扫帚一来一回，每扫一下往前面扬一把灰；Claude 压缩完了由 setAgentMood 收工 */

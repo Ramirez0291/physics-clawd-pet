@@ -8,11 +8,19 @@ import {
   CHIME_LEAD,
   COIN_BITES,
   KNOCK_BEATS,
+  MAGIC_DRAW,
+  MAGIC_FIRE,
+  MAGIC_FIRE_END,
+  MAGIC_HAT,
+  MAGIC_STOW,
+  MAGIC_THRUST,
   NORMAL,
   type Pet,
   STOCK_LEN,
   STRETCH_RELEASE,
   SWEEP_STROKE,
+  wandGeom,
+  wandLift,
 } from './pet';
 
 /** 单个部件的局部变换（格子单位），缩放以部件中心为锚 */
@@ -123,6 +131,15 @@ const C = {
   straw: parseHex('#d9a441'),
   strawDark: parseHex('#a8742a'),
   logo: parseHex('#4d6bfe'),
+  hat: parseHex('#3d6fd1'),
+  hatShade: parseHex('#2c58ad'),
+  hatDark: parseHex('#1d3270'),
+  hatBand: parseHex('#1c2140'),
+  sequin: parseHex('#f5d33f'),
+  wand: parseHex('#d9b36a'),
+  star: parseHex('#fee440'),
+  starHot: parseHex('#f15bb5'),
+  starCore: parseHex('#fff6fb'),
 };
 
 /** 电脑翻开的程度：开头翻开、结尾合上，各 0.45 秒 */
@@ -428,6 +445,100 @@ function broomProps(pet: Pet, skin: Skin, swing: number, out: Prop[]) {
   out.push({ x: (bx - 2) * PX, y: by * PX, w: 5 * PX, h: PX, rgba: C.strawDark });
   out.push({ x: (bx - 3) * PX, y: (by + 1) * PX, w: 7 * PX, h: 2 * PX, rgba: C.straw });
   out.push({ x: (bx - 4) * PX, y: (by + 3) * PX, w: 9 * PX, h: PX, rgba: C.straw });
+}
+
+/**
+ * 魔法帽（照着 Clawd 毛绒公仔的那顶画的）：44×20 道具像素，蓝色带黄色亮片，
+ * 帽尖往 +x 拐过去垂在旁边，底下一圈深色帽带。画的时候让帽尖垂在身后。
+ */
+const HAT_ART = [
+  '.........................dddddd.............',
+  '.......................ddppppppdd...........',
+  '.....................ddpppyypppppdd.........',
+  '...................ddpppppyypppppppdd.......',
+  '.............ddddddppppppppppppppdpssdd.....',
+  '...........ddpppppppppppppppppppd.dssssd....',
+  '..........dpppppppppyypppppppppppd.dssssd...',
+  '.........dppppppppppyyppppppppppppd.dsssd...',
+  '........dppppppppppppppppppppppppppdssssd...',
+  '.......dpppppppppppppppppppyyppppppsssssd...',
+  '......dpppppyypppppppppppppyyppppppssssd....',
+  '.....dppppppyyppppppppppppppppppppppppd.....',
+  '....dppppppppppppppppppppppppppppyyppppd....',
+  '...dpppppppppppppppppppppyyppppppyypppppd...',
+  '...dppppppppppppyypppppppyypppppppppppppd...',
+  '..dpppppyyppppppyypppppppppppppppppppppppd..',
+  '.dppppppyypppppppppppppppppppppyypppppppppd.',
+  'dppppppppppppppppppppppppppppppyypppppppppd.',
+  '.dnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnd.',
+  '.dddddddddddddddddddddddddddddddddddddddddd.',
+];
+
+/**
+ * 魔法帽：从天上掉下来扣到头上，落地弹一下。像公仔那样戴得很深：帽带压在眼睛正上方
+ * （没有眼睛、或者眼睛太靠下的形象，最多压到身体的四成高）。
+ */
+function hatProps(pet: Pet, skin: Skin, out: Prop[]) {
+  const tm = pet.modeTime;
+  const fall = tm < MAGIC_HAT ? -Math.round((1 - (tm / MAGIC_HAT) ** 2) * 30) : tm < MAGIC_HAT + 0.12 ? -1 : 0;
+  const w = HAT_ART[0].length;
+  const h = HAT_ART.length;
+  const body = skin.bodyBox;
+  const bottom = Math.min(skin.eyeBox ? skin.eyeBox.y : Infinity, body.y + body.h * 0.4);
+  const x0 = Math.round((body.x + body.w / 2) * 3 - w / 2);
+  const y0 = Math.round(bottom * 3) - h + fall;
+  const color: Record<string, number> = { p: C.hat, s: C.hatShade, d: C.hatDark, n: C.hatBand, y: C.sequin };
+  const flip = pet.dir > 0;
+  HAT_ART.forEach((line, r) =>
+    [...line].forEach((ch, c) => {
+      if (ch === '.') return;
+      const x = x0 + (flip ? w - 1 - c : c);
+      out.push({ x: x * PX, y: (y0 + r) * PX, w: PX, h: PX, rgba: color[ch], torso: true });
+    }),
+  );
+}
+
+/** 魔杖：从手里指向 pet.aim，杖尖一颗星；前摇时越聚越大、一闪一闪，放激光时最亮 */
+function wandProps(pet: Pet, skin: Skin, out: Prop[]) {
+  const tm = pet.modeTime;
+  const g = wandGeom(skin.grid, pet.dir, pet.aim, wandLift(tm));
+  const steps = Math.ceil(Math.max(Math.abs(g.tx - g.hx), Math.abs(g.ty - g.hy)));
+  for (let i = 0; i < steps; i++) {
+    const x = Math.round(g.hx + ((g.tx - g.hx) * i) / steps);
+    const y = Math.round(g.hy + ((g.ty - g.hy) * i) / steps);
+    out.push({ x: x * PX, y: y * PX, w: PX, h: PX, rgba: C.wand });
+  }
+  const firing = tm >= MAGIC_FIRE && tm < MAGIC_FIRE_END;
+  const charging = tm >= MAGIC_DRAW && tm < MAGIC_FIRE;
+  // 前摇越到后面闪得越快、星星越大
+  const charge = charging ? (tm - MAGIC_DRAW) / (MAGIC_FIRE - MAGIC_DRAW) : 0;
+  const pulse = Math.floor(pet.t * (8 + 16 * charge)) % 2 === 0;
+  const arm = firing ? 3 : charging ? 1 + Math.round(charge * 2) - (pulse ? 0 : 1) : 1;
+  const tx = Math.round(g.tx);
+  const ty = Math.round(g.ty);
+  const tipColor = charging && pulse ? C.starHot : C.star;
+  for (let k = 1; k <= Math.max(1, arm); k++) {
+    for (const [dx, dy] of [
+      [k, 0],
+      [-k, 0],
+      [0, k],
+      [0, -k],
+    ]) {
+      out.push({ x: (tx + dx) * PX, y: (ty + dy) * PX, w: PX, h: PX, rgba: k === 1 ? C.starCore : tipColor });
+    }
+  }
+  // 大星星补上斜角，看起来更圆
+  if (arm >= 2) {
+    for (const [dx, dy] of [
+      [1, 1],
+      [-1, 1],
+      [1, -1],
+      [-1, -1],
+    ]) {
+      out.push({ x: (tx + dx) * PX, y: (ty + dy) * PX, w: PX, h: PX, rgba: tipColor });
+    }
+  }
+  out.push({ x: tx * PX, y: ty * PX, w: PX, h: PX, rgba: C.starCore });
 }
 
 /** 脸红：每只眼睛下面一小块，稍微偏外 */
@@ -791,6 +902,53 @@ export function computePose(pet: Pet, skin: Skin): Pose {
       broomProps(pet, skin, swing, props);
       break;
     }
+    case 'magic': {
+      // 帽子扣到头上 → 一只手掏出魔杖、另一只叉腰 → 前摇：魔杖举过头顶抡、身子往后仰、
+      // 最后往前一戳 → 放激光，被顶得直哆嗦 → 得意地眯眼笑
+      const tm = pet.modeTime;
+      const holding = tm >= MAGIC_HAT && tm < pet.modeDuration - MAGIC_STOW;
+      const lift = wandLift(tm);
+      const firing = tm >= MAGIC_FIRE && tm < MAGIC_FIRE_END;
+      each((pp, part, i) => {
+        if (part.role === 'arm') {
+          if (part.side === pet.dir) {
+            if (holding) {
+              pp.dy = -0.5 - lift;
+              pp.dx = part.side * 0.3;
+            }
+          } else {
+            pp.dy = 0.5;
+          }
+        } else if (part.role === 'leg' && firing) {
+          // 被往后推：脚底下蹭着地
+          pp.dx = -pet.dir * (Math.sin(t * 40 + i) > 0 ? 0.33 : 0);
+        }
+      });
+      if (lift > 0) {
+        // 前摇：身子跟着魔杖往后仰，越往后越蓄力
+        torso.dx = -pet.dir * 0.3 * lift;
+        crouchBy(0.3 * lift);
+      } else if (tm >= MAGIC_FIRE - MAGIC_THRUST && tm < MAGIC_FIRE + 0.1) {
+        // 往前一戳
+        torso.dx = pet.dir * 0.5;
+      } else if (firing) {
+        torso.dx = -pet.dir * (Math.floor(t * 30) % 2 ? 0.5 : 0.2);
+        crouchBy(0.5);
+      }
+      if (tm < MAGIC_HAT) {
+        look = { x: 0, y: -1 };
+      } else if (tm < MAGIC_FIRE_END) {
+        look = { x: pet.dir * Math.cos(pet.aim), y: Math.sin(pet.aim) };
+        if (firing) eyeSquint = 0.5;
+        else if (tm >= MAGIC_DRAW) eyeSquint = 0.7;
+      } else {
+        eyeSquint = 0.25;
+        eyeLookScale = 0;
+      }
+      hatProps(pet, skin, props);
+      if (holding) wandProps(pet, skin, props);
+      break;
+    }
     case 'sign': {
       // 双手把牌子举过头顶，一颠一颠的
       const k = smoothstep(pet.modeTime / 0.3);
@@ -876,6 +1034,8 @@ function faceFor(pet: Pet): Expression {
       return Math.floor(pet.t * 30) % 2 ? 'wince' : 'surprised';
     case 'knock':
       return 'surprised';
+    case 'magic':
+      return tm < MAGIC_HAT ? 'surprised' : tm < MAGIC_FIRE ? 'focus' : tm < MAGIC_FIRE_END ? 'smug' : 'happy';
     default:
       return 'smile';
   }

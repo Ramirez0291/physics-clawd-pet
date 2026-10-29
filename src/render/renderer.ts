@@ -1,9 +1,10 @@
-import { type Affine, apply, invert, mul, scale } from '../engine/math';
+import { type Affine, apply, clamp, invert, mul, scale } from '../engine/math';
 import { type Tuning, cellSize, spritePixel } from '../engine/params';
 import type { ParticleSystem } from '../engine/particles';
-import type { Pet } from '../engine/pet';
+import { MAGIC_FIRE, MAGIC_FIRE_END, MAGIC_GROW, type Pet, wandGeom, wandLift } from '../engine/pet';
 import { bodyTransform, computePose } from '../engine/pose';
 import type { Skin } from '../skin/types';
+import { type Clip, clipFrame } from './clips';
 import { FurCache, drawItems, layoutItems } from './smooth';
 
 /** 设备像素矩形 */
@@ -58,6 +59,11 @@ function makeTarget(): Target {
 const STAR = '#f5c542';
 const INK = '#141413';
 const HEART = ['.#.#.', '#####', '.###.', '..#..'];
+/** 魔法激光：从外到里 深紫、紫、粉、白芯；每层的基础粗细（特效像素） */
+const BEAM = ['#6d3bd7', '#b15cff', '#ff7ad9', '#fff6fb'];
+const BEAM_W = [11, 8, 5, 2];
+/** 光束旁边蹦的亮点 */
+const GLINT = ['#fff6fb', '#fee440'];
 /** 八分音符 */
 const NOTE = ['..##.', '..#.#', '..#..', '###..', '###..'];
 
@@ -80,6 +86,8 @@ export class Renderer {
   private fur = new FurCache();
   /** 迷你 Clawd 之类的附加宠物：各有一块精灵画布 */
   private extras = new Map<Pet, Target>();
+  /** 当前皮肤解码好了的播片 */
+  private clips = new Map<string, Clip>();
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -101,6 +109,11 @@ export class Renderer {
     this.lastSig = '';
     this.fur.clear();
     this.extras.clear();
+    this.clips.clear();
+  }
+
+  setClip(id: string, clip: Clip) {
+    this.clips.set(id, clip);
   }
 
   resize(cssW: number, cssH: number, dpr: number) {
@@ -147,6 +160,7 @@ export class Renderer {
       showThink ||
       extras.length > 0 ||
       pet.emote !== null ||
+      pet.beamEnd !== null ||
       T.showHitbox ||
       T.showVelocity;
     const sig = `${frame.ox},${frame.oy},${frame.w},${frame.h},${frame.up},${frame.hash}`;
@@ -168,6 +182,8 @@ export class Renderer {
       this.blit(g.canvas, g.ox, g.oy, g.w, g.h, g.up);
     }
     ctx.globalAlpha = 1;
+    // 激光压在宠物下面：杖尖的星星盖住光束的起点
+    if (pet.beamEnd) this.drawBeam(pet, frame);
     this.blit(this.sprite, frame.ox, frame.oy, frame.w, frame.h, frame.up);
     for (const p of extras) {
       let t = this.extras.get(p);
@@ -186,6 +202,8 @@ export class Renderer {
   // ---------- 精灵栅格化 ----------
 
   private rasterize(pet: Pet, T: Tuning, target: Target): SpriteFrame {
+    const clip = pet.mode === 'clip' && pet.clip !== null ? this.clips.get(pet.clip) : undefined;
+    if (clip) return this.drawClip(pet, T, target, clip);
     if (!this.skin.pixelArt) return this.drawSmooth(pet, T, target);
     const skin = this.skin;
     const dpr = this.dpr;
@@ -399,6 +417,28 @@ export class Renderer {
     return { ox, oy, up: 1, w: W, h: H, m, opaque, hash: hash >>> 0, fx: spritePixel(T, dpr) };
   }
 
+  /**
+   * 播片：GIF 的一格 = 2 个精灵像素（clawd-400 的 Clawd 脚宽 16 格，和我们的 Clawd 差不多宽），
+   * 脚底贴着宠物脚下的地面、左右居中。只在地上播，所以不管旋转和压扁。
+   */
+  private drawClip(pet: Pet, T: Tuning, target: Target, clip: Clip): SpriteFrame {
+    const dpr = this.dpr;
+    const f = clipFrame(clip, pet.modeTime);
+    const up = Math.max(1, Math.round((cellSize(T, dpr, this.skin.pixelArt) * dpr * 2) / 3));
+    const ox = Math.round((pet.pos.x + pet.visOffset.x) * dpr - (clip.w / 2) * up);
+    const oy = Math.round((pet.pos.y + pet.visOffset.y + pet.halfH) * dpr - clip.floor * up);
+    if (target.canvas.width < clip.w || target.canvas.height < clip.h) {
+      target.canvas.width = Math.max(target.canvas.width, clip.w);
+      target.canvas.height = Math.max(target.canvas.height, clip.h);
+    }
+    target.ctx.putImageData(f.image, 0, 0);
+    const b = f.box;
+    const opaque = b ? { x0: ox + b.x0 * up, y0: oy + b.y0 * up, x1: ox + b.x1 * up, y1: oy + b.y1 * up } : null;
+    const hash = Math.imul(clip.frames.indexOf(f) + 1, 2654435761) >>> 0;
+    const m = mul(scale(dpr), bodyTransform(pet, cellSize(T, dpr, this.skin.pixelArt)));
+    return { ox, oy, up, w: clip.w, h: clip.h, m, opaque, hash, fx: spritePixel(T, dpr) };
+  }
+
   private blit(src: HTMLCanvasElement, ox: number, oy: number, w: number, h: number, up: number) {
     this.ctx.drawImage(src, 0, 0, w, h, ox, oy, w * up, h * up);
     this.markDirty(ox, oy, w * up, h * up);
@@ -534,6 +574,130 @@ export class Renderer {
     ctx.fillStyle = STAR;
     for (const [x, y] of cells) ctx.fillRect(x0 + x * u, y0 + y * u, u, u);
     this.markDirty(x0 - o, y0 - o, 2 * u + 2 * o, 6 * u + 2 * o);
+  }
+
+  /**
+   * 魔法激光：从杖尖射到 beamEnd，0.1 秒射出去，最后 0.25 秒变细消失。
+   * 粗细沿着光束一鼓一鼓地往前涌，旁边蹦亮点；杖尖先炸一圈光芒，打中的地方先一大团白光，
+   * 之后一圈一圈往外扩的冲击环。都按特效像素一格一格画，斜着射也是像素台阶。
+   */
+  private drawBeam(pet: Pet, f: SpriteFrame) {
+    const end = pet.beamEnd!;
+    const d = this.dpr;
+    const u = f.fx;
+    const ctx = this.ctx;
+    const [gw, gh] = this.skin.grid;
+    const g = wandGeom(this.skin.grid, pet.dir, pet.aim, wandLift(pet.modeTime));
+    const a = apply(f.m, g.tx / 3 - gw / 2, g.ty / 3 - gh / 2);
+    const since = pet.modeTime - MAGIC_FIRE;
+    const grow = clamp(since / MAGIC_GROW, 0, 1);
+    const fade = clamp((MAGIC_FIRE_END - pet.modeTime) / 0.25, 0, 1);
+    const flick = Math.floor(pet.t * 24) % 2;
+    const ex = end.x * d;
+    const ey = end.y * d;
+    const bx = a.x + (ex - a.x) * grow;
+    const by = a.y + (ey - a.y) * grow;
+    const len = Math.hypot(bx - a.x, by - a.y);
+    const n = Math.max(1, Math.ceil(len / u));
+    // 垂直于光束的方向：亮点往两边蹦
+    const nx = len > 0 ? -(by - a.y) / len : 0;
+    const ny = len > 0 ? (bx - a.x) / len : 1;
+    const snap = (v: number) => Math.round(v / u) * u;
+    let x0 = Math.min(a.x, bx);
+    let y0 = Math.min(a.y, by);
+    let x1 = Math.max(a.x, bx);
+    let y1 = Math.max(a.y, by);
+    const growBox = (x: number, y: number, r: number) => {
+      x0 = Math.min(x0, x - r);
+      y0 = Math.min(y0, y - r);
+      x1 = Math.max(x1, x + r);
+      y1 = Math.max(y1, y + r);
+    };
+    const dot = (x: number, y: number, s: number) => ctx.fillRect(snap(x) - s / 2, snap(y) - s / 2, s, s);
+    /** 实心像素圆 */
+    const disk = (cx: number, cy: number, r: number, color: string) => {
+      ctx.fillStyle = color;
+      const k = Math.ceil(r / u);
+      for (let j = -k; j <= k; j++) {
+        const w = Math.floor(Math.sqrt(Math.max(0, k * k - j * j)));
+        ctx.fillRect(snap(cx) - w * u - u / 2, snap(cy) + j * u - u / 2, (2 * w + 1) * u, u);
+      }
+      growBox(cx, cy, (k + 1) * u);
+    };
+
+    // 光束：每层粗细沿着光束一鼓一鼓地往前涌
+    BEAM.forEach((color, layer) => {
+      const base = BEAM_W[layer] * (layer === BEAM.length - 1 ? Math.min(1, fade * 2) : fade);
+      if (base < 0.5) return;
+      ctx.fillStyle = color;
+      for (let i = 0; i <= n; i++) {
+        const surge = layer === BEAM.length - 1 ? 1 : 1 + 0.3 * Math.sin(i * 0.45 - pet.t * 50) + 0.1 * flick;
+        const s = Math.max(1, Math.round(base * surge)) * u;
+        dot(a.x + ((bx - a.x) * i) / n, a.y + ((by - a.y) * i) / n, s);
+      }
+    });
+    const halfW = (BEAM_W[0] * 1.4 * u) / 2;
+    growBox(a.x, a.y, halfW);
+    growBox(bx, by, halfW);
+
+    // 光束两边蹦的亮点：每帧换一批
+    const frame = Math.floor(pet.t * 30);
+    for (let i = 0; i < n; i += 5) {
+      const h = Math.imul(i * 2654435761 ^ frame * 40503, 2246822519) >>> 0;
+      if (h % 3) continue;
+      const side = (h & 8 ? 1 : -1) * (halfW + ((h >>> 4) % 4) * u);
+      ctx.fillStyle = GLINT[(h >>> 8) & 1];
+      dot(a.x + ((bx - a.x) * i) / n + nx * side, a.y + ((by - a.y) * i) / n + ny * side, u);
+    }
+    growBox(a.x, a.y, halfW + 4 * u);
+    growBox(bx, by, halfW + 4 * u);
+
+    // 杖尖：刚开火炸出一圈八道光芒，之后一直亮着一团
+    if (since < 0.18) {
+      const k = 1 - since / 0.18;
+      const r = (4 + 12 * k) * u;
+      ctx.fillStyle = BEAM[3];
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2;
+        for (let s = u; s <= r; s += u) dot(a.x + Math.cos(ang) * s, a.y + Math.sin(ang) * s, i % 2 ? u : 2 * u);
+      }
+      growBox(a.x, a.y, r + 2 * u);
+    }
+    disk(a.x, a.y, (3 + flick) * u * Math.max(0.4, fade), BEAM[2]);
+    disk(a.x, a.y, 1.5 * u * Math.max(0.4, fade), BEAM[3]);
+
+    if (grow < 1 || fade <= 0) {
+      this.markDirty(x0, y0, x1 - x0, y1 - y0);
+      return;
+    }
+    const hit = since - MAGIC_GROW;
+    // 刚打中：一大团白光，0.15 秒缩回去
+    if (hit < 0.15) {
+      const k = 1 - hit / 0.15;
+      disk(bx, by, (6 + 10 * k) * u, BEAM[1]);
+      disk(bx, by, (4 + 8 * k) * u, BEAM[3]);
+    }
+    // 一圈一圈往外扩的冲击环
+    for (let ring = 0; ring < 3; ring++) {
+      const ph = (hit * 3.5 + ring / 3) % 1;
+      if (ph > 0.85) continue;
+      const r = (3 + ph * 18) * u * (0.5 + 0.5 * fade);
+      ctx.fillStyle = BEAM[3 - Math.min(3, Math.floor(ph * 4))];
+      const steps = Math.max(8, Math.ceil((2 * Math.PI * r) / u));
+      for (let i = 0; i < steps; i++) {
+        const ang = (i / steps) * Math.PI * 2;
+        dot(bx + Math.cos(ang) * r, by + Math.sin(ang) * r, u);
+      }
+      growBox(bx, by, r + 2 * u);
+    }
+    // 打中的地方：一团亮光 + 十字闪光
+    disk(bx, by, (3 + flick * 2) * u * fade, BEAM[2]);
+    const r = (flick ? 6 : 4) * u * fade;
+    ctx.fillStyle = BEAM[3];
+    ctx.fillRect(snap(bx) - r - u / 2, snap(by) - u / 2, 2 * r + u, u);
+    ctx.fillRect(snap(bx) - u / 2, snap(by) - r - u / 2, u, 2 * r + u);
+    disk(bx, by, 1.5 * u, BEAM[3]);
+    this.markDirty(x0, y0, x1 - x0, y1 - y0);
   }
 
   /** 思考中：头顶三个点，像聊天软件的"对方正在输入"一样轮流亮 */
