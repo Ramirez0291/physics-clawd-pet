@@ -265,6 +265,7 @@ const out = new URL('../../skins/deepseek/skin.json', import.meta.url);
 build({
   id: 'deepseek',
   name: 'DeepSeek-chan',
+  category: 'humanoid',
   description: 'DeepSeek 拟人鲸鱼女仆，像素小人（同人皮肤，非官方）',
   palette,
   legend,

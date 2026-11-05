@@ -155,7 +155,13 @@ describe.each(SKINS.map((s) => [s.id, s] as const))('皮肤 %s', (_id, skin) => 
     const pet = makePet(skin);
     pet.perform('petted');
     run(pet, 0.2);
-    const blush = computePose(pet, skin).props.filter((p) => p.rgba === BLUSH);
+    const pose = computePose(pet, skin);
+    if (skin.motions?.love) {
+      expect(pose.motion).toBe('love');
+      expect(pose.props.filter((p) => p.rgba === BLUSH)).toHaveLength(0);
+      return;
+    }
+    const blush = pose.props.filter((p) => p.rgba === BLUSH);
     expect(blush.length).toBe(2);
     const eyes = skin.parts.filter((part) => part.role === 'eye');
     for (const [i, b] of blush.entries()) {

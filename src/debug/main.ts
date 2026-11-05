@@ -26,6 +26,12 @@ const MODE_NAMES: Record<string, string> = {
   stocks: '炒股',
   coin: '吃TOKEN',
   shake: '抖毛',
+  read: '读书',
+  write: '写字',
+  think: '思考',
+  perch: '坐标题栏',
+  peek: '边缘探头',
+  hop: '跳窗蓄力',
   chime: '报时',
   stretch: '伸懒腰',
   sign: '举牌子',
@@ -62,6 +68,7 @@ async function main() {
   let tuning: Tuning = { ...DEFAULT_TUNING };
   let defaults: Tuning = { ...DEFAULT_TUNING };
   let connected = false;
+  let availableActions = new Set<string>();
   const rows = new Map<TuningKey, Row>();
   const groups = new Map<string, { details: HTMLDetailsElement; count: HTMLElement; keys: TuningKey[] }>();
 
@@ -181,16 +188,30 @@ async function main() {
       paused: boolean;
       skins: SkinInfo[];
       skin: string;
+      category?: 'creature' | 'humanoid';
       actions: string[];
       clips?: string[];
     }) => {
       connected = true;
+      availableActions = new Set(s.actions);
       tuning = mergeTuning(DEFAULT_TUNING, s.tuning);
       defaults = mergeTuning(DEFAULT_TUNING, s.defaults);
       paused = s.paused;
       $('pause').textContent = paused ? '继续' : '暂停';
       $('pause').classList.toggle('active', paused);
-      skinSelect.replaceChildren(...s.skins.map(({ id, name }) => new Option(name, id, false, id === s.skin)));
+      skinSelect.replaceChildren(...(['creature', 'humanoid'] as const).flatMap((category) => {
+        const skins = s.skins.filter((skin) => (skin.category ?? 'creature') === category);
+        if (!skins.length) return [];
+        const group = document.createElement('optgroup');
+        group.label = category === 'humanoid' ? '拟人角色' : '宠物角色';
+        group.append(...skins.map(({ id, name }) => new Option(name, id, false, id === s.skin)));
+        return [group];
+      }));
+      const affection = document.querySelector<HTMLButtonElement>('[data-act="petted"]');
+      if (affection) {
+        affection.textContent = s.category === 'humanoid' ? '摸摸' : '摸摸';
+        affection.title = s.category === 'humanoid' ? '脸红、双手合在胸前，安静地表达喜欢' : '摸摸头';
+      }
       // 当前形象不会的小动作按钮置灰（摸摸和提醒动作谁都会）
       for (const b of document.querySelectorAll<HTMLButtonElement>('[data-act]')) {
         const act = b.dataset.act!;
@@ -214,6 +235,13 @@ async function main() {
   skinSelect.onchange = () => bus.emit('pet-skin', { id: skinSelect.value });
 
   bus.on('telemetry', (t: Telemetry) => {
+    for (const action of ['perch', 'peek', 'hop']) {
+      const button = document.querySelector<HTMLButtonElement>(`[data-act="${action}"]`);
+      if (!button) continue;
+      const possible = action === 'hop' ? t.canWindowHop : t.support !== null;
+      button.disabled = !availableActions.has(action) || !possible;
+      button.title = !availableActions.has(action) ? '这个形象不会这个动作' : possible ? '' : action === 'hop' ? '附近没有够得着的窗口' : '先把角色放到窗口标题栏上';
+    }
     if (!connected) bus.emit('debug-hello');
     const grounded = !['air', 'held'].includes(t.mode);
     const surface = t.support !== null ? '窗口顶上' : (SIDE_NAMES[t.side] ?? t.side);

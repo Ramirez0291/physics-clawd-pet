@@ -4,6 +4,7 @@
 import type { Affine } from '../engine/math';
 import type { Pose } from '../engine/pose';
 import type { PartShape, Skin, SkinPart } from '../skin/types';
+import { imagePiece } from './sprites';
 
 /** 摆好姿势后的一个部件或道具：中心、半宽高（网格坐标，原点在网格左上角）、旋转（弧度） */
 export interface Item {
@@ -38,6 +39,15 @@ export function layoutItems(skin: Skin, pose: Pose): Item[] {
   ) => {
     let cx = x + w / 2 + pp.dx;
     let cy = y + h / 2 + pp.dy;
+    // 贴图和像素部件共用肩关节、发根：旋转时围绕关节移动部件中心。
+    if (part?.pivot && rot) {
+      const px = part.pivot[0] + pp.dx;
+      const py = part.pivot[1] + pp.dy;
+      const dx = cx - px;
+      const dy = cy - py;
+      cx = px + Math.cos(rot) * dx - Math.sin(rot) * dy;
+      cy = py + Math.sin(rot) * dx + Math.cos(rot) * dy;
+    }
     let hw = (w / 2) * pp.sx;
     let hh = (h / 2) * pp.sy;
     if (torso) {
@@ -50,7 +60,8 @@ export function layoutItems(skin: Skin, pose: Pose): Item[] {
   };
   skin.parts.forEach((part, i) => {
     const [x, y, w, h] = part.rect;
-    add(x, y, w, h, pose.parts[i], part.role !== 'leg' && !part.anchored, ((part.rot ?? 0) * Math.PI) / 180, part, part.rgba);
+    const rot = pose.parts[i].rot + ((part.rot ?? 0) * Math.PI) / 180;
+    add(x, y, w, h, pose.parts[i], part.role !== 'leg' && !part.anchored, rot, part, part.rgba);
   });
   const none = { dx: 0, dy: 0, sx: 1, sy: 1 };
   for (const p of pose.props) add(p.x, p.y, p.w, p.h, none, !!p.torso, 0, null, p.rgba, !!p.soft);
@@ -327,6 +338,15 @@ export function drawItems(
       // 其他道具（电脑、金币）本来就是像素画，照原样画成小方块
       g.fillStyle = unpack(it.rgba);
       g.fillRect(-it.hw, -it.hh, it.hw * 2, it.hh * 2);
+      continue;
+    }
+    if (part.image) {
+      const image = imagePiece(part.image);
+      if (image) {
+        g.imageSmoothingEnabled = false;
+        g.drawImage(image, -it.hw, -it.hh, it.hw * 2, it.hh * 2);
+        g.imageSmoothingEnabled = true;
+      }
       continue;
     }
     if (part.fur) {

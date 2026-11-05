@@ -84,7 +84,7 @@ const cells = (px) => Math.round((px / SUB) * 10000) / 10000;
  * 按绘制顺序（后面的盖住前面的）。closed、faces 的图层和 art 放在同一个坐标系里，会裁成同样大小。
  * 整张图会被平移到网格里：左右居中、脚底贴着网格底边，网格宽高取整到整格。
  */
-export function build({ id, name, description, palette, legend, actions, laptop, parts, out, preview }) {
+export function build({ id, name, description, category, palette, legend, actions, laptop, parts, out, preview }) {
   const all = parts.map((p) => bounds(p.art)).filter(Boolean);
   const bx0 = Math.min(...all.map((b) => b.x0));
   const by0 = Math.min(...all.map((b) => b.y0));
@@ -121,6 +121,7 @@ export function build({ id, name, description, palette, legend, actions, laptop,
     id,
     name,
     description,
+    ...(category ? { category } : {}),
     grid: [gw, gh],
     render: 'pixel',
     ...(laptop ? { laptop } : {}),

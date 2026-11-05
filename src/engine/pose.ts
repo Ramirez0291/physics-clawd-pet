@@ -1,7 +1,8 @@
 // 程序化动作：根据宠物状态给每个部件算偏移/缩放。
 // 只依赖部件角色（body/eye/arm/leg），换皮肤不用改这里。
 
-import { type Expression, type Skin, parseHex } from '../skin/types';
+import { type Expression, type Skin, type MotionName, type SkinCategory, parseHex } from '../skin/types';
+import { adaptHumanoidPose } from './humanoid';
 import { type Affine, type Vec2, clamp, mul, rotate, scale, squashAlong, translate } from './math';
 import {
   CHIME_GAP,
@@ -55,6 +56,9 @@ export interface Pose {
   props: Prop[];
   /** 现在该是什么表情（有表情图的皮肤才看得出来） */
   face: Expression;
+  /** 拟人类可用原画动作代替部件拼接；仍受同一套物理变换控制。 */
+  motion?: MotionName;
+  motionTime?: number;
 }
 
 const ident = (): PartPose => ({ dx: 0, dy: 0, sx: 1, sy: 1, rot: 0 });
@@ -988,7 +992,8 @@ export function computePose(pet: Pet, skin: Skin): Pose {
     pp.sy *= eyeSquint;
   });
 
-  return { torso, parts, props, face: faceFor(pet) };
+  const pose = { torso, parts, props, face: faceFor(pet) };
+  return skin.category === 'humanoid' ? adaptHumanoidPose(pet, skin, pose) : pose;
 }
 
 /** 按状态挑表情：被甩、被电挤成 >_<，被摸、庆祝笑开花，炒股赚了得意、亏了掉眼泪…… */
@@ -1076,7 +1081,7 @@ function jointPoses(pet: Pet, skin: Skin, parts: PartPose[]) {
  * 宠物本地坐标（格子单位，原点在网格中心）→ 世界坐标（CSS px）。
  * unit 由渲染器给出（取整到整数设备像素后的实际格子大小）。
  */
-export function bodyTransform(pet: Pet, unit: number): Affine {
+export function bodyTransform(pet: Pet, unit: number, category: SkinCategory = 'creature'): Affine {
   const T = pet.tuning;
   const cx = pet.pos.x + pet.visOffset.x;
   const cy = pet.pos.y + pet.visOffset.y;
@@ -1089,7 +1094,7 @@ export function bodyTransform(pet: Pet, unit: number): Affine {
 
   if (pet.mode === 'air') {
     const sp = Math.hypot(pet.vel.x, pet.vel.y);
-    const k = 1 + Math.min(T.maxStretch, sp * T.stretchPerSpeed);
+    const k = 1 + Math.min(category === 'humanoid' ? Math.min(T.maxStretch, 0.16) : T.maxStretch, sp * T.stretchPerSpeed);
     if (k > 1.001) deform = squashAlong(Math.atan2(pet.vel.y, pet.vel.x), k);
   } else if (pet.mode === 'held') {
     const pivot = pet.holdPivot;
@@ -1097,7 +1102,7 @@ export function bodyTransform(pet: Pet, unit: number): Affine {
       px = pivot.x;
       py = pivot.y;
     }
-    if (T.holdStretch > 0) deform = squashAlong(rot + Math.PI / 2, 1 + T.holdStretch);
+    if (T.holdStretch > 0) deform = squashAlong(rot + Math.PI / 2, 1 + Math.min(T.holdStretch, category === 'humanoid' ? 0.1 : T.holdStretch));
   } else if (pet.grounded) {
     // 贴着面时以接触点为锚，压扁时脚不离地
     const n = NORMAL[pet.side];
@@ -1108,7 +1113,8 @@ export function bodyTransform(pet: Pet, unit: number): Affine {
   // 站在移动窗口上的惯性后仰，同样绕脚底转
   if (Math.abs(pet.lean) > 1e-3) deform = deform ? mul(deform, rotate(pet.lean)) : rotate(pet.lean);
 
-  const s = clamp(pet.squash, -T.maxSquash, T.maxSquash);
+  const limit = category === 'humanoid' ? Math.min(T.maxSquash, 0.2) : T.maxSquash;
+  const s = clamp(pet.squash, -limit, limit);
   if (Math.abs(s) > 1e-3) {
     const sq = squashAlong(pet.squashAngle, 1 - s);
     deform = deform ? mul(sq, deform) : sq;

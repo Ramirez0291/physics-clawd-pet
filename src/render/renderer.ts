@@ -1,11 +1,13 @@
 import { type Affine, apply, clamp, invert, mul, scale } from '../engine/math';
 import { type Tuning, cellSize, spritePixel } from '../engine/params';
 import type { ParticleSystem } from '../engine/particles';
-import { MAGIC_FIRE, MAGIC_FIRE_END, MAGIC_GROW, type Pet, wandGeom, wandLift } from '../engine/pet';
-import { bodyTransform, computePose } from '../engine/pose';
+import { MAGIC_FIRE, MAGIC_FIRE_END, MAGIC_GROW, NORMAL, type Pet, wandGeom, wandLift } from '../engine/pet';
+import { bodyTransform, computePose, type Pose } from '../engine/pose';
 import type { Skin } from '../skin/types';
 import { type Clip, clipFrame } from './clips';
 import { FurCache, drawItems, layoutItems } from './smooth';
+import { spriteRevision } from './sprites';
+import { motionFrames, motionFrameIndex, motionMirrored } from './motions';
 
 /** 设备像素矩形 */
 interface Rect {
@@ -204,13 +206,17 @@ export class Renderer {
   private rasterize(pet: Pet, T: Tuning, target: Target): SpriteFrame {
     const clip = pet.mode === 'clip' && pet.clip !== null ? this.clips.get(pet.clip) : undefined;
     if (clip) return this.drawClip(pet, T, target, clip);
-    if (!this.skin.pixelArt) return this.drawSmooth(pet, T, target);
+    const pose = computePose(pet, this.skin);
+    if (pose.motion) {
+      const frame = this.drawMotion(pet, T, target, pose);
+      if (frame) return frame;
+    }
+    if (!this.skin.pixelArt) return this.drawSmooth(pet, T, target, pose);
     const skin = this.skin;
     const dpr = this.dpr;
     const up = spritePixel(T, dpr);
     const unitCss = cellSize(T, dpr);
-    const pose = computePose(pet, skin);
-    const m = mul(scale(dpr), bodyTransform(pet, unitCss));
+    const m = mul(scale(dpr), bodyTransform(pet, unitCss, skin.category));
 
     // 精灵像素网格对齐到宠物中心（取整），这样平移时像素不会闪
     const anchor = apply(m, 0, 0);
@@ -367,12 +373,12 @@ export class Renderer {
   }
 
   /** 平滑画风：画进精灵画布，1 个精灵像素 = 1 个设备像素 */
-  private drawSmooth(pet: Pet, T: Tuning, target: Target): SpriteFrame {
+  private drawSmooth(pet: Pet, T: Tuning, target: Target, pose: Pose): SpriteFrame {
     const skin = this.skin;
     const dpr = this.dpr;
     const unit = cellSize(T, dpr, false);
-    const m = mul(scale(dpr), bodyTransform(pet, unit));
-    const items = layoutItems(skin, computePose(pet, skin));
+    const m = mul(scale(dpr), bodyTransform(pet, unit, skin.category));
+    const items = layoutItems(skin, pose);
     const [gw, gh] = skin.grid;
 
     // 包围盒（设备像素）：每个部件的四个角（考虑部件自身的旋转）变换到屏幕上
@@ -396,7 +402,7 @@ export class Renderer {
         if (p.x > maxX) maxX = p.x;
         if (p.y > maxY) maxY = p.y;
       }
-      for (const v of [it.cx, it.cy, it.hw, it.hh, it.rgba]) hash = Math.imul(hash ^ Math.round(v * 64), 16777619);
+      for (const v of [it.cx, it.cy, it.hw, it.hh, it.rot, it.rgba]) hash = Math.imul(hash ^ Math.round(v * 64), 16777619);
     }
     for (const v of [m.a, m.b, m.c, m.d, m.e, m.f]) hash = Math.imul(hash ^ Math.round(v * 64), 16777619);
 
@@ -412,9 +418,73 @@ export class Renderer {
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, W, H);
     drawItems(g, items, skin, m, ox, oy, unit * dpr, target.fur);
+    hash = Math.imul(hash ^ spriteRevision(), 16777619);
 
     const opaque = Number.isFinite(minX) ? { x0: minX, y0: minY, x1: maxX, y1: maxY } : null;
     return { ox, oy, up: 1, w: W, h: H, m, opaque, hash: hash >>> 0, fx: spritePixel(T, dpr) };
+  }
+
+  /** 拟人动作图集跟随真实的抛掷、自转、贴墙、碰撞回弹，不是独立播放的装饰。 */
+  private drawMotion(pet: Pet, T: Tuning, target: Target, pose: Pose): SpriteFrame | null {
+    const skin = this.skin;
+    const motion = pose.motion && skin.motions?.[pose.motion];
+    if (!motion) return null;
+    const frames = motionFrames(motion);
+    if (!frames) return null;
+    const unit = cellSize(T, this.dpr, skin.pixelArt);
+    const m = mul(scale(this.dpr), bodyTransform(pet, unit, skin.category));
+    const speed = pet.side === 'floor' ? pet.tuning.walkSpeed : pet.tuning.climbSpeed;
+    const locomotion = pose.motion === 'walk';
+    const speedScale = pet.mode === 'peek' ? 0.6 : 1;
+    const rate = (motion.fps ?? 2) * (locomotion ? speed * speedScale / 40 : 1);
+    const time = pose.motionTime ?? pet.modeTime;
+    const index = motionFrameIndex(motion, { side: pet.side, mode: pet.mode, modeTime: time, tuning: pet.tuning }, locomotion, speedScale);
+    const frame = frames[index];
+    const floor = Math.max(...frames.map((f) => f.box.y + f.box.h));
+    const top = Math.min(...frames.map((f) => f.box.y));
+    const size = skin.grid[1] * motion.height / (floor - top);
+    const bob = locomotion ? -Math.abs(Math.sin(time * rate * Math.PI / 2)) * 0.12 : pose.motion === 'love' ? -Math.sin(time * 2.4) * 0.06 : 0;
+    const w = frame.box.w * size, h = frame.box.h * size;
+    const rolling = pet.mode === 'roll';
+    const x = -w / 2; // 图集各格留白不完全相同，统一主体中心，防止换帧时左右跳动。
+    const seat = pet.support ? (1 - (motion.anchorY ?? 1)) * (floor - top) * size : 0;
+    const y = rolling ? -h / 2 : skin.grid[1] / 2 + (frame.box.y - floor) * size + bob + seat;
+    const mirror = motionMirrored(motion, pet.side, pet.dir);
+    const x0 = mirror ? -x - w : x;
+    const corners = [[x0, y], [x0 + w, y], [x0, y + h], [x0 + w, y + h]].map(([a, b]) => apply(m, a, b));
+    if (rolling) {
+      // 抱膝后绕自身中心滚，并把当前轮廓重新贴到接触面，避免缩短的身体悬空或钻进地板。
+      const n = NORMAL[pet.side];
+      const support = Math.min(...corners.map((p) => p.x * n.x + p.y * n.y));
+      const floor = ((pet.pos.x + pet.visOffset.x) * n.x + (pet.pos.y + pet.visOffset.y) * n.y - pet.rollRadius) * this.dpr;
+      const delta = floor - support;
+      m.e += n.x * delta; m.f += n.y * delta;
+      for (const p of corners) { p.x += n.x * delta; p.y += n.y * delta; }
+    }
+    // 道具页角、笔尖也要计入脏矩形，保留绘制边距。
+    const minX = Math.min(...corners.map((p) => p.x)) - unit;
+    const minY = Math.min(...corners.map((p) => p.y)) - unit;
+    const maxX = Math.max(...corners.map((p) => p.x)) + unit;
+    const maxY = Math.max(...corners.map((p) => p.y)) + unit;
+    const ox = Math.floor(minX), oy = Math.floor(minY);
+    const W = Math.min(2048, Math.ceil(maxX) - ox + 1), H = Math.min(2048, Math.ceil(maxY) - oy + 1);
+    if (target.canvas.width < W || target.canvas.height < H) {
+      target.canvas.width = Math.max(target.canvas.width, W); target.canvas.height = Math.max(target.canvas.height, H);
+    }
+    const g = target.ctx;
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H);
+    g.setTransform(m.a, m.b, m.c, m.d, m.e - ox, m.f - oy);
+    if (mirror) g.scale(-1, 1);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(frame.image, frame.box.x, frame.box.y, frame.box.w, frame.box.h, x, y, w, h);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    const props = layoutItems(skin, pose).filter((i) => !i.part);
+    drawItems(g, props, skin, m, ox, oy, unit * this.dpr, target.fur);
+    let hash = 2166136261;
+    for (const n of [index, mirror ? 1 : 0, x0, y, w, h, m.a, m.b, m.c, m.d, m.e, m.f, spriteRevision(), ...props.flatMap((p) => [p.cx, p.cy, p.hw, p.hh, p.rgba])]) hash = Math.imul(hash ^ Math.round(n * 1000), 16777619);
+    // 同一索引的不同动作不能复用上一动作的画面。
+    for (const c of pose.motion!) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
+    return { ox, oy, up: 1, w: W, h: H, m, opaque: { x0: minX, y0: minY, x1: maxX, y1: maxY }, hash: hash >>> 0, fx: spritePixel(T, this.dpr) };
   }
 
   /**
@@ -435,7 +505,7 @@ export class Renderer {
     const b = f.box;
     const opaque = b ? { x0: ox + b.x0 * up, y0: oy + b.y0 * up, x1: ox + b.x1 * up, y1: oy + b.y1 * up } : null;
     const hash = Math.imul(clip.frames.indexOf(f) + 1, 2654435761) >>> 0;
-    const m = mul(scale(dpr), bodyTransform(pet, cellSize(T, dpr, this.skin.pixelArt)));
+    const m = mul(scale(dpr), bodyTransform(pet, cellSize(T, dpr, this.skin.pixelArt), this.skin.category));
     return { ox, oy, up, w: clip.w, h: clip.h, m, opaque, hash, fx: spritePixel(T, dpr) };
   }
 

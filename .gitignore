@@ -16,3 +16,8 @@ app-icon.png
 artifacts/preview-browser/
 # macOS Finder
 .DS_Store
+# Codex 本地环境
+.codex/
+# graph-workflow 的重建目录和中间产物
+_gw-*/
+rebuild/
