@@ -331,6 +331,7 @@ export interface OverlayHost {
 export interface SkinInfo {
   id: string;
   name: string;
+  category?: 'creature' | 'humanoid';
 }
 
 const sameRect = (a: HitRect, b: HitRect) => a.every((v, i) => Math.abs(v - b[i]) < 0.5);

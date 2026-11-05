@@ -1,6 +1,6 @@
 {
   "name": "physics-clawd-pet",
-  "version": "2.5.1",
+  "version": "2.6.0",
   "description": "A desktop pet with exaggerated cartoon physics",
   "license": "MIT",
   "private": true,
@@ -12,7 +12,8 @@
     "test": "vitest run",
     "tauri": "tauri",
     "icon": "node scripts/make-icon.mjs && tauri icon app-icon.png",
-    "skin:deepseek": "node scripts/skins/deepseek.mjs"
+    "skin:deepseek": "node scripts/skins/deepseek.mjs",
+    "skin:miss-claude": "node scripts/skins/miss-claude.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.2"

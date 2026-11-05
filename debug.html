@@ -8,73 +8,128 @@
   </head>
   <body>
     <header>
-      <div id="status" class="status">等待覆盖层连接…</div>
-      <div class="toolbar">
-        <button id="pause" title="空格">暂停</button>
-        <button id="step" title="→ 键：前进一帧">单步</button>
+      <div class="heading">
+        <div class="title"><h1>调教面板</h1><p>陪它玩，调调手感。</p></div>
+        <button id="openAssistant" class="quiet" title="待办、日历、报时和休息提醒">小助手 ↗</button>
+      </div>
+      <div class="grid4">
+        <label class="field-label" for="skin">当前形象</label>
+        <select id="skin" class="span3"><option>等待连接…</option></select>
+      </div>
+      <div class="grid4">
+        <button id="actionMenu" class="primary span2" aria-haspopup="dialog" aria-controls="actionDialog">动作菜单</button>
         <button id="reset">叫回来</button>
-        <button id="replay" title="R 键：用完全相同的初速度再扔一次">重放上次投掷</button>
-        <button id="fullscreenTest" title="把调教面板变成全屏窗口，测试全屏免打扰（Esc 退出）">全屏测试</button>
-        <button id="openAssistant" title="待办、日历、报时和休息提醒">小助手</button>
+        <button id="pause" title="空格">暂停</button>
       </div>
-      <div class="toolbar presets">
-        <span>测试投掷</span>
-        <button data-preset="drop">高空坠落</button>
-        <button data-preset="throwRight">向右猛甩</button>
-        <button data-preset="wallLeft">砸左墙</button>
-        <button data-preset="ceiling">上抛天花板</button>
-        <button data-preset="slam">斜砸地面</button>
-        <button data-preset="roll">平飞翻滚</button>
-        <button id="nextScreen" title="从下一块屏幕上空掉下来（只有一块屏幕时先打开下面的“模拟双屏”）">下一块屏幕</button>
-      </div>
-      <div class="toolbar presets">
-        <span>小动作</span>
-        <button data-act="petted">摸摸</button>
-        <button data-act="laptop">敲代码</button>
-        <button data-act="stocks">炒股</button>
-        <button data-act="coin">吃TOKEN</button>
-        <button data-act="shake">抖毛</button>
-      </div>
-      <div class="toolbar presets">
-        <span>提醒动作</span>
-        <button data-act="chime" data-cue>报时</button>
-        <button data-act="stretch" data-cue>伸懒腰</button>
-        <button data-act="sign" data-cue>举牌子</button>
-        <button data-act="celebrate" data-cue>庆祝</button>
-        <button data-act="zap" data-cue>被电</button>
-        <button data-act="knock" data-cue>跺脚</button>
-        <button data-act="magic" data-cue>魔法</button>
-        <button data-act="mini" data-cue>来只迷你</button>
-        <button data-act="mini-clear" data-cue>迷你收工</button>
-      </div>
-      <div class="toolbar presets" id="clipBar" hidden>
-        <span>播片</span>
-        <span id="clips"></span>
-      </div>
-      <div class="toolbar presets">
-        <span>形象</span>
-        <select id="skin"></select>
-      </div>
-      <div class="filter">
-        <input id="search" type="search" placeholder="搜索参数…" />
-        <label><input id="changedOnly" type="checkbox" /> 只看改过的</label>
-      </div>
+      <details class="telemetry">
+        <summary><span id="statusSummary" role="status">等待覆盖层连接…</span><span class="detail-label">详细状态</span></summary>
+        <div id="status" class="status"><span class="status-empty">连接后显示速度、冲击与屏幕信息</span></div>
+      </details>
     </header>
-    <main id="params"></main>
+    <main>
+      <nav class="tabs grid4" role="tablist" aria-label="参数分类">
+        <button id="tab-common" role="tab" data-view="common" aria-selected="true" aria-controls="params">常用</button>
+        <button id="tab-physics" role="tab" data-view="physics" aria-selected="false" aria-controls="params" tabindex="-1">物理</button>
+        <button id="tab-behavior" role="tab" data-view="behavior" aria-selected="false" aria-controls="params" tabindex="-1">行为</button>
+        <button id="tab-appearance" role="tab" data-view="appearance" aria-selected="false" aria-controls="params" tabindex="-1">外观</button>
+      </nav>
+      <div class="filter grid4">
+        <input id="search" class="span3" type="search" placeholder="搜索全部参数…" aria-label="搜索全部参数" />
+        <label class="check" title="只看改过的参数"><input id="changedOnly" type="checkbox" />只看改过</label>
+      </div>
+      <p id="viewHint" class="view-hint">常用的几项放在这里，更多细节按分类展开。</p>
+      <section id="params" role="tabpanel" aria-labelledby="tab-common"></section>
+      <p id="empty" class="empty" hidden>没有符合条件的参数</p>
+    </main>
     <footer>
-      <div class="toolbar">
-        <button id="save" class="primary">保存</button>
-        <button id="defaults">全部恢复默认</button>
-        <button id="copy">复制 JSON</button>
-        <button id="importToggle">导入 JSON</button>
-        <label id="pinWrap"><input id="pin" type="checkbox" /> 面板置顶</label>
+      <div class="grid4">
+        <span id="changeSummary" class="change-summary span2">当前为默认参数</span>
+        <details id="configMenu" class="config-menu">
+          <summary class="control">更多</summary>
+          <div class="config-content">
+            <div class="grid4">
+              <button id="defaults" class="span2">全部恢复默认</button>
+              <button id="copy">复制 JSON</button>
+              <button id="importToggle" aria-expanded="false" aria-controls="importBox">导入 JSON</button>
+              <label id="pinWrap" class="check span4"><input id="pin" type="checkbox" />面板置顶</label>
+            </div>
+            <div id="importBox" class="grid4" hidden>
+              <textarea id="importText" class="span4" rows="5" aria-label="参数 JSON" placeholder="粘贴 JSON，只会覆盖认识的参数"></textarea>
+              <button id="importApply" class="apply">应用</button>
+            </div>
+          </div>
+        </details>
+        <button id="save" class="save">保存参数</button>
       </div>
-      <div id="importBox" hidden>
-        <textarea id="importText" rows="5" placeholder="粘贴 JSON，只会覆盖认识的参数"></textarea>
-        <button id="importApply">应用</button>
-      </div>
-      <div id="note" class="note"></div>
+      <div id="note" class="note" role="status"></div>
     </footer>
+
+    <dialog id="actionDialog" aria-labelledby="actionTitle" aria-describedby="actionHint">
+      <div class="dialog-heading">
+        <div><h2 id="actionTitle">让它做点什么？</h2><p id="actionHint">选中即执行，菜单自动收起。</p></div>
+        <button id="closeActions" class="icon-button" aria-label="关闭动作菜单">×</button>
+      </div>
+      <nav class="tabs track" role="tablist" aria-label="动作分类">
+        <button id="action-tab-daily" role="tab" data-action-tab="daily" aria-selected="true" aria-controls="actions-daily">日常</button>
+        <button id="action-tab-window" role="tab" data-action-tab="window" aria-selected="false" aria-controls="actions-window" tabindex="-1">窗口</button>
+        <button id="action-tab-cues" role="tab" data-action-tab="cues" aria-selected="false" aria-controls="actions-cues" tabindex="-1">提醒</button>
+        <button id="action-tab-tests" role="tab" data-action-tab="tests" aria-selected="false" aria-controls="actions-tests" tabindex="-1">投掷</button>
+        <button id="clipTab" role="tab" data-action-tab="clips" aria-selected="false" aria-controls="clipBar" tabindex="-1" hidden>播片</button>
+      </nav>
+      <section id="actions-daily" class="action-page" role="tabpanel" aria-labelledby="action-tab-daily" data-action-page="daily">
+        <div class="action-grid">
+          <button data-act="petted">摸摸</button>
+          <button data-act="laptop">敲代码</button>
+          <button data-act="stocks">炒股</button>
+          <button data-act="coin">吃TOKEN</button>
+          <button data-act="shake">抖毛</button>
+          <button data-act="read">读书</button>
+          <button data-act="write">写字</button>
+          <button data-act="think">思考</button>
+        </div>
+        <p class="action-hint">灰色动作表示当前形象不支持。</p>
+      </section>
+      <section id="actions-window" class="action-page" role="tabpanel" aria-labelledby="action-tab-window" data-action-page="window" hidden>
+        <div class="action-grid">
+          <button data-act="perch" title="先站到窗口标题栏上">坐标题栏</button>
+          <button data-act="peek" title="先站到窗口标题栏上">边缘探头</button>
+          <button data-act="hop" title="跳到上方够得着的窗口">跳窗</button>
+        </div>
+        <p class="action-hint">先把它放到窗口标题栏上；跳窗需要附近有够得着的窗口。</p>
+      </section>
+      <section id="actions-cues" class="action-page" role="tabpanel" aria-labelledby="action-tab-cues" data-action-page="cues" hidden>
+        <div class="action-grid">
+          <button data-act="chime" data-cue>报时</button>
+          <button data-act="stretch" data-cue>伸懒腰</button>
+          <button data-act="sign" data-cue>举牌子</button>
+          <button data-act="celebrate" data-cue>庆祝</button>
+          <button data-act="zap" data-cue>被电</button>
+          <button data-act="knock" data-cue>跺脚</button>
+          <button data-act="magic" data-cue>魔法</button>
+          <button data-act="mini" data-cue>来只迷你</button>
+          <button data-act="mini-clear" data-cue>迷你收工</button>
+        </div>
+      </section>
+      <section id="actions-tests" class="action-page" role="tabpanel" aria-labelledby="action-tab-tests" data-action-page="tests" hidden>
+        <div class="action-grid">
+          <button data-preset="drop">高空坠落</button>
+          <button data-preset="throwRight">向右猛甩</button>
+          <button data-preset="wallLeft">砸左墙</button>
+          <button data-preset="ceiling">上抛天花板</button>
+          <button data-preset="slam">斜砸地面</button>
+          <button data-preset="roll">平飞翻滚</button>
+        </div>
+        <div class="test-tools action-grid">
+          <button id="replay" title="R 键：用完全相同的初速度再扔一次" disabled>重放上次投掷</button>
+          <button id="step" title="→ 键：暂停并前进一帧">单步</button>
+          <button id="nextScreen" title="只有一块屏幕时，可在外观 → 调试显示里开启模拟双屏">下一块屏幕</button>
+          <button id="fullscreenTest" title="测试全屏免打扰（Esc 退出）">全屏测试</button>
+        </div>
+      </section>
+      <section class="action-page" id="clipBar" role="tabpanel" aria-labelledby="clipTab" data-action-page="clips" hidden>
+        <div id="clips" class="action-grid"></div>
+      </section>
+    </dialog>
     <script type="module" src="/src/debug/main.ts"></script>
   </body>
 </html>

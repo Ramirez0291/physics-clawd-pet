@@ -114,6 +114,8 @@ struct Texts {
     hide: &'static str,
     show: &'static str,
     character: &'static str,
+    creatures: &'static str,
+    humanoids: &'static str,
     size: &'static str,
     bigger: &'static str,
     smaller: &'static str,
@@ -135,6 +137,8 @@ const ZH: Texts = Texts {
     hide: "隐藏 {name}",
     show: "显示 {name}",
     character: "形象",
+    creatures: "宠物角色",
+    humanoids: "拟人角色",
     size: "大小",
     bigger: "放大",
     smaller: "缩小",
@@ -154,6 +158,8 @@ const EN: Texts = Texts {
     hide: "Hide {name}",
     show: "Show {name}",
     character: "Character",
+    creatures: "Pets",
+    humanoids: "Humanoid characters",
     size: "Size",
     bigger: "Bigger",
     smaller: "Smaller",
@@ -174,6 +180,8 @@ const JA: Texts = Texts {
     hide: "{name}を隠す",
     show: "{name}を表示",
     character: "キャラクター",
+    creatures: "ペット",
+    humanoids: "人型キャラクター",
     size: "サイズ",
     bigger: "大きく",
     smaller: "小さく",
@@ -489,6 +497,8 @@ impl TrayItems {
 struct SkinInfo {
     id: String,
     name: String,
+    #[serde(default)]
+    category: String,
 }
 
 /// 覆盖层告诉托盘有哪些形象、当前是哪个（菜单项 id 是 "skin:<id>"）
@@ -501,10 +511,16 @@ fn tray_set_skins(app: AppHandle, state: State<Shared>, skins: Vec<SkinInfo>, cu
     for old in items.skins.items().map_err(err)? {
         items.skins.remove(&old).map_err(err)?;
     }
-    for s in &skins {
-        let id = format!("skin:{}", s.id);
-        let item = CheckMenuItem::with_id(&app, id, &s.name, true, s.id == current, None::<&str>).map_err(err)?;
-        items.skins.append(&item).map_err(err)?;
+    for (category, label) in [("creature", texts().creatures), ("humanoid", texts().humanoids)] {
+        let members: Vec<_> = skins.iter().filter(|s| (s.category == "humanoid") == (category == "humanoid")).collect();
+        if members.is_empty() { continue; }
+        let group = Submenu::with_id(&app, format!("skin-group:{category}"), label, true).map_err(err)?;
+        for s in members {
+            let id = format!("skin:{}", s.id);
+            let item = CheckMenuItem::with_id(&app, id, &s.name, true, s.id == current, None::<&str>).map_err(err)?;
+            group.append(&item).map_err(err)?;
+        }
+        items.skins.append(&group).map_err(err)?;
     }
     if let Some(s) = skins.iter().find(|s| s.id == current) {
         *items.name.lock().unwrap() = s.name.clone();

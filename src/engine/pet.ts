@@ -50,6 +50,12 @@ export type Mode =
   | 'stocks' // 掏出笔记本炒股
   | 'coin' // 掏出 token 金币吃掉
   | 'shake' // 抖毛（毛茸茸的皮肤专属）
+  | 'read' // 安静读书
+  | 'write' // 写笔记
+  | 'think' // 托腮思考
+  | 'perch' // 坐在窗口标题栏晃腿
+  | 'peek' // 走到窗口边缘探头
+  | 'hop' // 跳窗前蓄力
   | 'chime' // 整点报时：举着铃铛摇，几点摇几下
   | 'stretch' // 提醒休息：伸个大懒腰
   | 'sign' // 日程/待办：跑到屏幕中间举牌子
@@ -60,12 +66,13 @@ export type Mode =
   | 'clip'; // 播片：一段画好的 GIF 顶替程序化的样子（见 render/clips.ts）
 
 /** 发呆时会随机做的小动作。皮肤在 skin.json 的 actions 里挑自己会做哪些。 */
-export type Activity = 'laptop' | 'stocks' | 'coin' | 'shake';
-export const ACTIVITIES: readonly Activity[] = ['laptop', 'stocks', 'coin', 'shake'];
+export type Activity = 'laptop' | 'stocks' | 'coin' | 'shake' | 'read' | 'write' | 'think' | 'perch' | 'peek' | 'hop';
+export const ACTIVITIES: readonly Activity[] = ['laptop', 'stocks', 'coin', 'shake', 'read', 'write', 'think', 'perch', 'peek', 'hop'];
 /** 皮肤没写 actions 时会做的 */
 export const DEFAULT_ACTIVITIES: readonly Activity[] = ['laptop', 'stocks', 'coin'];
 /** 随机挑小动作时的权重 */
-const ACTIVITY_WEIGHT: Record<Activity, number> = { laptop: 0.4, stocks: 0.3, coin: 0.3, shake: 0.3 };
+const ACTIVITY_WEIGHT: Record<Activity, number> = { laptop: 0.4, stocks: 0.3, coin: 0.3, shake: 0.3, read: 0.35, write: 0.35, think: 0.2, perch: 0.5, peek: 0.35, hop: 0.2 };
+const SEATED_ACTIVITIES: ReadonlySet<Activity> = new Set(['laptop', 'stocks', 'read', 'write']);
 
 /** 玩电脑类的小动作（电脑摆在 dir 那一侧的地上） */
 export const LAPTOP_MODES: ReadonlySet<Mode> = new Set(['laptop', 'stocks']);
@@ -203,6 +210,7 @@ export const NORMAL: Record<Side, Vec2> = {
 };
 
 const GROUNDED: ReadonlySet<Mode> = new Set([
+  'perch', 'peek', 'hop',
   'idle',
   'walk',
   'land',
@@ -215,6 +223,9 @@ const GROUNDED: ReadonlySet<Mode> = new Set([
   'stocks',
   'coin',
   'shake',
+  'read',
+  'write',
+  'think',
   'chime',
   'stretch',
   'sign',
@@ -225,9 +236,11 @@ const GROUNDED: ReadonlySet<Mode> = new Set([
   'magic',
 ]);
 /** 这些状态下光标在头顶来回蹭就算摸摸 */
-const RUBBABLE: ReadonlySet<Mode> = new Set(['idle', 'walk', 'land', 'petted', 'laptop', 'stocks', 'coin', 'shake']);
+const RUBBABLE: ReadonlySet<Mode> = new Set(['idle', 'walk', 'land', 'petted', 'laptop', 'stocks', 'coin', 'shake', 'read', 'write', 'think', 'perch', 'peek', 'hop']);
 /** 这些状态下挡住输入框会主动让开 */
 const AVOIDING: ReadonlySet<Mode> = new Set([
+  'perch', 'peek', 'hop',
+  'read', 'write', 'think',
   'idle',
   'walk',
   'laptop',
@@ -241,6 +254,8 @@ const AVOIDING: ReadonlySet<Mode> = new Set([
 ]);
 /** 这些状态可以马上被提醒动作打断；其他状态（飞着、被拎着、落地硬直）等站稳了再做 */
 const CUEABLE: ReadonlySet<Mode> = new Set([
+  'perch', 'peek',
+  'read', 'write', 'think',
   'idle',
   'walk',
   'petted',
@@ -321,6 +336,14 @@ export class Pet {
   carryVel: Vec2 = { x: 0, y: 0 };
   /** 惯性后仰（弧度，绕脚底） */
   lean = 0;
+  /** 由皮肤显式启用的窗口玩法；普通宠物保持原来的物理行为。 */
+  windowPlay = false;
+  windowStumbleUntil = 0;
+  windowDropUntil = 0;
+  windowLeapUntil = 0;
+  windowLandingUntil = 0;
+  peekApproaching = false;
+  private plannedLeap: { id: number; x: number } | null = null;
 
   /** 正在输入的输入框（覆盖层 CSS 像素），null = 没有 */
   inputZone: Bounds | null = null;
@@ -462,10 +485,16 @@ export class Pet {
   }
 
   /** 换皮肤：碰撞盒跟着网格大小变 */
-  setGrid(grid: [number, number], opts: { pixelArt?: boolean; actions?: readonly Activity[] } = {}) {
+  setGrid(grid: [number, number], opts: { pixelArt?: boolean; actions?: readonly Activity[]; windowPlay?: boolean } = {}) {
     this.grid = grid;
     this.pixelArt = opts.pixelArt ?? true;
     this.actions = new Set(opts.actions ?? DEFAULT_ACTIVITIES);
+    this.windowPlay = opts.windowPlay ?? false;
+    if (!this.windowPlay) {
+      this.windowStumbleUntil = this.windowDropUntil = this.windowLeapUntil = this.windowLandingUntil = 0;
+      this.plannedLeap = null;
+      if (this.mode === 'perch' || this.mode === 'peek' || this.mode === 'hop') this.setMode('idle', 0.5);
+    }
     // 正在做新皮肤不会的小动作：收手
     if ((ACTIVITIES as readonly Mode[]).includes(this.mode) && !this.actions.has(this.mode as Activity)) {
       this.setMode('idle', rand(this.tuning.idleMin, this.tuning.idleMax, this.rng));
@@ -504,6 +533,10 @@ export class Pet {
   updateCarrier(id: number, left: number, top: number, vx: number, vy: number) {
     const c = this.carrier;
     const same = c.id === id && Number.isFinite(c.left);
+    if (this.windowPlay && same && this.support?.id === id && this.grounded) {
+      const before = Math.hypot(c.vx, c.vy), after = Math.hypot(vx, vy);
+      if (before > 100 && after < before * 0.55 && Math.hypot(vx - c.vx, vy - c.vy) > 100) this.windowStumbleUntil = this.t + 1;
+    }
     const dx = same ? left - c.left : 0;
     const dy = same ? top - c.top : 0;
     c.id = id;
@@ -560,6 +593,10 @@ export class Pet {
       return true;
     }
     return this.startActivity(m);
+  }
+
+  get canWindowHop(): boolean {
+    return this.windowPlay && this.side === 'floor' && RUBBABLE.has(this.mode) && this.mode !== 'hop' && this.reachablePlatforms().length > 0;
   }
 
   /**
@@ -791,6 +828,7 @@ export class Pet {
     this.vel = { x: 0, y: 0 };
     this.angVel = 0;
     this.emote = { kind: '!', t: 0 };
+    if (this.windowPlay) this.windowDropUntil = this.t + 1.2;
     this.events.push({ type: 'dropped' });
   }
 
@@ -1029,7 +1067,15 @@ export class Pet {
       case 'stocks':
       case 'coin':
       case 'shake':
+      case 'read':
+      case 'write':
+      case 'think':
+      case 'perch':
+      case 'peek':
         this.stepActivity(dt);
+        break;
+      case 'hop':
+        this.stepHop();
         break;
       case 'chime':
       case 'stretch':
@@ -1063,10 +1109,14 @@ export class Pet {
     this.mode = m;
     this.modeTime = 0;
     this.modeDuration = duration;
+    if (m !== 'hop') this.plannedLeap = null;
+    if (m !== 'peek') this.peekApproaching = false;
     if (m === 'air' || m === 'held') {
+      this.windowLandingUntil = 0;
       this.support = null;
       this.seg = null;
     }
+    if (m === 'held') this.windowDropUntil = this.windowLeapUntil = 0;
     if (m !== 'walk') {
       this.fleeing = false;
       this.seeking = false;
@@ -1264,6 +1314,10 @@ export class Pet {
       this.attach('floor', p ? null : seg, undefined, opts);
       const c = this.carrier;
       this.carryVel = p && c.id === p.id ? { x: c.vx, y: c.vy } : { x: 0, y: 0 };
+      if (p && this.windowPlay) {
+        this.windowLandingUntil = this.t + 1.1;
+        this.windowLeapUntil = this.windowDropUntil = 0;
+      }
     };
 
     if (impact >= T.splatSpeed) {
@@ -1512,37 +1566,84 @@ export class Pet {
 
   /** 跳上附近一个更高的窗口顶边。没有合适的返回 false。 */
   private jumpToPlatform(): boolean {
+    const reachable = this.reachablePlatforms();
+    if (!reachable.length) return false;
+    const p = reachable[Math.floor(this.rng() * reachable.length)];
+    const x = this.windowPlay ? (p.x0 + p.x1) / 2 : clamp(this.pos.x, p.x0 + this.halfW, p.x1 - this.halfW);
+    this.leapTo(p, x);
+    return true;
+  }
+
+  private reachablePlatforms(): Platform[] {
     const T = this.tuning;
     const feet = this.pos.y + this.halfH;
     const hw = this.halfW;
-    const reachable = this.platforms.filter((p) => {
+    return this.platforms.filter((p) => {
       const rise = feet - p.y;
-      if (rise < 40 || rise > T.platformJumpMax || p.id === this.support?.id) return false;
+      const minRise = this.windowPlay && this.support ? -160 : 40;
+      if (rise < minRise || rise > T.platformJumpMax || p.id === this.support?.id) return false;
       if (!this.hasHeadroom(p) || p.x1 - p.x0 < hw * 2) return false;
-      const tx = clamp(this.pos.x, p.x0 + hw, p.x1 - hw);
+      const tx = this.windowPlay ? (p.x0 + p.x1) / 2 : clamp(this.pos.x, p.x0 + hw, p.x1 - hw);
       return Math.abs(tx - this.pos.x) < 700 && !this.blocksInput(tx, p.y - this.halfH);
     });
-    if (!reachable.length) return false;
-    const p = reachable[Math.floor(this.rng() * reachable.length)];
-    this.leapTo(p, clamp(this.pos.x, p.x0 + hw, p.x1 - hw));
-    return true;
   }
 
   /** 跳上窗口顶边 p，落在 x = tx 处。弹道多跳 60px 再落下 */
   private leapTo(p: Platform, tx: number) {
+    if (this.windowPlay && this.grounded && this.mode !== 'hop') {
+      this.setMode('hop', 0.34);
+      this.plannedLeap = { id: p.id, x: tx };
+      this.dir = tx >= this.pos.x ? 1 : -1;
+      return;
+    }
     const g = this.tuning.gravity;
     const feet = this.pos.y + this.halfH;
-    const extra = 60;
+    const extra = Math.max(60, 60 - (feet - p.y));
     const vy = -Math.sqrt(2 * g * (feet - p.y + extra));
     // 顶点附近重力变小会多滞空一会儿；从顶点落到平台只落 extra 那么高
     const T = this.tuning;
     const tUp = -vy / g;
     const tApex = ((2 * T.apexSpeed) / g) * (1 / Math.max(0.05, T.apexGravityMul) - 1);
     const tDown = Math.sqrt((2 * extra) / (g * T.fallGravityMul));
+    let horizontalTravel = tUp + tApex + tDown;
+    if (this.windowPlay) {
+      // 与 stepAir 相同的重力/顶点减速/空气阻力积分，给平级、较低窗口计算落点。
+      // 不能套用恒定重力的时间，否则短跳会提前落回原来的标题栏。
+      const dt = 1 / 120, drag = Math.max(0, 1 - T.airDrag * dt), targetY = p.y - feet;
+      let y = 0, velocity = vy, retained = 1, travel = 0;
+      for (let i = 0; i < 1200; i++) {
+        const before = y;
+        let gravity = T.gravity * (velocity > 0 ? T.fallGravityMul : 1);
+        if (Math.abs(velocity) < T.apexSpeed) gravity *= T.apexGravityMul;
+        velocity = (velocity + gravity * dt) * drag;
+        y += velocity * dt;
+        retained *= drag;
+        travel += retained * dt;
+        if (velocity > 0 && before <= targetY && y >= targetY) {
+          travel -= retained * dt * (1 - (targetY - before) / Math.max(1e-9, y - before));
+          horizontalTravel = travel;
+          break;
+        }
+      }
+    }
     this.setMode('air');
-    this.vel = { x: (tx - this.pos.x) / (tUp + tApex + tDown), y: vy };
+    if (this.windowPlay) this.windowLeapUntil = this.t + 1;
+    this.vel = { x: (tx - this.pos.x) / Math.max(0.05, horizontalTravel), y: vy };
     this.angVel = 0;
     this.events.push({ type: 'leap' });
+  }
+
+  private stepHop() {
+    if (this.modeTime < this.modeDuration) return;
+    const plan = this.plannedLeap;
+    const target = plan && this.platforms.find((p) => p.id === plan.id);
+    // 起跳前再检查一次，窗口关闭、移走或被抓起后不能执行过期的跳跃。
+    if (!plan || !target || !this.reachablePlatforms().some((p) => p.id === target.id)
+      || this.blocksInput(clamp(plan.x, target.x0 + this.halfW, target.x1 - this.halfW), target.y - this.halfH)) {
+      this.setMode('idle', 0.5);
+      return;
+    }
+    this.leapTo(target, clamp(plan.x, target.x0 + this.halfW, target.x1 - this.halfW));
   }
 
   /**
@@ -1702,7 +1803,12 @@ export class Pet {
   private startActivity(want?: Activity): boolean {
     const T = this.tuning;
     const onFloor = this.side === 'floor';
-    const can = (a: Activity) => this.actions.has(a) && (onFloor || !LAPTOP_MODES.has(a));
+    const can = (a: Activity) => {
+      if (!this.actions.has(a) || (!onFloor && SEATED_ACTIVITIES.has(a))) return false;
+      if (a === 'hop') return this.windowPlay && onFloor && this.mode !== 'hop' && this.reachablePlatforms().length > 0;
+      if (a === 'perch' || a === 'peek') return this.windowPlay && onFloor && !!this.support && this.support.x1 - this.support.x0 > this.halfW * 2 + 20;
+      return true;
+    };
     let m = want;
     if (m && !can(m)) return false;
     if (!m) {
@@ -1711,6 +1817,7 @@ export class Pet {
       m = options.find((a) => (r -= ACTIVITY_WEIGHT[a]) < 0) ?? options[options.length - 1];
       if (!m) return false;
     }
+    if (m === 'hop') return this.jumpToPlatform();
     if (LAPTOP_MODES.has(m)) {
       this.dir = this.laptopSide();
       // 开盘前先随机走一段，屏幕上一开始就有行情
@@ -1731,6 +1838,13 @@ export class Pet {
           ? SHAKE_TIME
           : rand(T.laptopMin, Math.max(T.laptopMin, T.laptopMax), this.rng);
     this.setMode(m, duration);
+    if (m === 'perch') this.modeDuration = rand(5, 9, this.rng);
+    if (m === 'peek') {
+      const s = this.support!;
+      this.dir = this.pos.x - s.x0 < s.x1 - this.pos.x ? -1 : 1;
+      this.peekApproaching = true;
+      this.modeDuration = (s.x1 - s.x0) / Math.max(1, T.walkSpeed * 0.6) + 5;
+    }
     return true;
   }
 
@@ -1749,6 +1863,27 @@ export class Pet {
 
   private stepActivity(dt: number) {
     const T = this.tuning;
+    if (this.mode === 'perch' || this.mode === 'peek') {
+      if (!this.support) { this.setMode('idle', 0.5); return; }
+      if (this.mode === 'peek' && this.peekApproaching) {
+        if (Math.hypot(this.carrier.vx, this.carrier.vy) > 65 || this.windowStumbleUntil > this.t) {
+          this.modeDuration += dt;
+          return;
+        }
+        const s = this.support, inset = Math.max(12, this.halfW * 0.8);
+        const [lo, hi] = this.sRange();
+        const target = clamp(this.dir < 0 ? s.x0 + inset : s.x1 - inset, lo, hi);
+        const delta = target - this.pos.x;
+        const step = Math.min(Math.abs(delta), Math.max(1, T.walkSpeed * 0.6) * dt);
+        this.pos.x += Math.sign(delta) * step;
+        if (Math.abs(delta) <= step + 0.5) {
+          this.pos.x = target;
+          this.peekApproaching = false;
+          this.modeTime = 0;
+          this.modeDuration = 4.5;
+        }
+      }
+    }
     if (this.mode === 'stocks') this.tickStock(dt);
     if (this.mode === 'coin') {
       while (this.bites < COIN_BITES.length && this.modeTime >= COIN_BITES[this.bites]) {

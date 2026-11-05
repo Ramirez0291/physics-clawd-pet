@@ -2,6 +2,7 @@
   "id": "deepseek",
   "name": "DeepSeek-chan",
   "description": "DeepSeek 拟人鲸鱼女仆，像素小人（同人皮肤，非官方）",
+  "category": "humanoid",
   "grid": [15, 17],
   "render": "pixel",
   "laptop": "lap",

@@ -101,6 +101,8 @@ Menus, the Assistant window and what the pet says follow your system language: C
 
 ### Tuning panel
 
+The panel opens with just the everyday controls. Use **Physics / Behavior / Appearance** for the rest; parameter groups expand one at a time, and search looks across every category. **Action menu** opens a categorized popup for activities, window play, reminders and test throws. Detailed telemetry and JSON tools stay folded away until needed.
+
 Everything about the feel is adjustable live: gravity, bounciness, landing thresholds, walking speed, size and 60+ other parameters, plus slow motion, pause and single-step, repeatable test throws and "replay last throw". **Save** writes `tuning.json` under `%APPDATA%\com.physicsclawdpet.desktop\` (Windows) or `~/Library/Application Support/com.physicsclawdpet.desktop/` (macOS).
 
 ### Build from source
@@ -144,6 +146,9 @@ A skin is one JSON file: a grid size, a palette and a list of parts. Each part h
 - **Simple pixel art:** parts are colored rectangles. See [`skins/clawd/skin.json`](skins/clawd/skin.json).
 - **Detailed pixel characters:** parts can be pixel images (`pixels` + a skin-level `legend`). Give arms a shoulder `pivot` and every animation turns into arm rotation; add `sway` for tails, ears and ahoge, `anchored` for parts that stay on the floor, `closed` eye frames, and `faces` for per-expression eyes and mouths (`happy`, `surprised`, `wince`, `cry`, `smug`, `focus`, `eat`, `yawn`). `"laptop": "lap"` makes the character sit down to type. Draw it as layered ASCII art and let [`scripts/pixel-skin.mjs`](scripts/pixel-skin.mjs) build the JSON; see [`scripts/skins/deepseek.mjs`](scripts/skins/deepseek.mjs) and `npm run skin:deepseek`.
 - **Smooth and furry:** `"render": "smooth"` with shapes (`ellipse`, `cloud`, `pear`, `onigiri`, `frog`, `bow`, `arch`, `eyelid`), `rot`, `outline` and `fur` (`length`, `density`, `curl`, `light`, `shade`). See [`skins/dots/skin.json`](skins/dots/skin.json).
+- **Reference-art characters:** `"render": "sprite"` uses transparent PNG parts, source-image masks and shoulder pivots to retain the artwork's detail. See [miss.claude](skins/miss-claude/README.md) and `npm run skin:miss-claude`.
+- **Humanoid motion category:** `"category": "humanoid"` separates human poses from creature gestures. A skin can supply a `motions` atlas for walking, affection, reading, writing and physics reactions; human characters appear in their own Character submenu.
+- **Window play:** miss.claude can sit on title bars, walk to an edge and peek down, balance on dragged windows, stumble after a gentle stop, and crouch before jumping between windows. Strong inertia still flings her off; closing a window removes her support.
 - `"actions"` picks idle activities from `laptop`, `stocks`, `coin` and `shake`; eye parts can lower `"gaze"` to keep pupils inside big eyeballs.
 
 `npm run dev` and `http://localhost:1420/preview.html` shows the Dots side by side at large and desktop sizes.
@@ -227,6 +232,8 @@ The engine code is released under the [MIT License](LICENSE). The characters are
 
 ### 调教面板
 
+首页只放常用调节，其他参数在 **物理 / 行为 / 外观** 分类中按组展开，搜索会查找全部分类。点 **动作菜单**，在分类弹框里选择日常互动、窗口玩耍、提醒或测试投掷，执行后菜单自动收起。详细状态、JSON 导入导出等工具也收起来了，需要时再打开。
+
 手感全都能实时调：重力、弹性、落地分级阈值、走路速度、大小等 60 多个参数，还有慢动作、暂停和单步、可重复的测试投掷、"重放上次投掷"。点 **保存** 写进 `tuning.json`：Windows 在 `%APPDATA%\com.physicsclawdpet.desktop\`，macOS 在 `~/Library/Application Support/com.physicsclawdpet.desktop/`。
 
 ### 从源码构建
@@ -250,6 +257,9 @@ npm test
 - **简单像素风：** 部件就是纯色矩形，参考 [`skins/clawd/skin.json`](skins/clawd/skin.json)。
 - **精细的像素角色：** 部件可以是像素图（`pixels` + 皮肤的 `legend`）。给手臂一个肩关节 `pivot`，所有动作都会变成绕肩旋转；`sway` 让尾巴、耳朵、呆毛自己晃，`anchored` 让部件贴地不动，`closed` 是闭眼图，`faces` 给每种表情（`happy`、`surprised`、`wince`、`cry`、`smug`、`focus`、`eat`、`yawn`）画眼睛和嘴巴。`"laptop": "lap"` 让角色坐下来敲电脑。用分层的 ASCII 像素图画，交给 [`scripts/pixel-skin.mjs`](scripts/pixel-skin.mjs) 生成 JSON，参考 [`scripts/skins/deepseek.mjs`](scripts/skins/deepseek.mjs) 和 `npm run skin:deepseek`。
 - **平滑、毛茸茸：** `"render": "smooth"`，配合各种形状（`ellipse`、`cloud`、`pear`、`onigiri`、`frog`、`bow`、`arch`、`eyelid`）、`rot`、`outline` 和 `fur`（`length`、`density`、`curl`、`light`、`shade`），参考 [`skins/dots/skin.json`](skins/dots/skin.json)。
+- **保留原画细节：** `"render": "sprite"` 使用透明 PNG 裁片、轮廓蒙版和肩关节，直接适配人物设定图。参考 [miss.claude](skins/miss-claude/README.md)，用 `npm run skin:miss-claude` 重新生成配置。
+- **拟人动作类别：** `"category": "humanoid"` 将人物姿态与宠物动作分开；皮肤可通过 `motions` 提供行走、读写及物理反应图集。人物会出现在「形象 → 拟人角色」中。
+- **窗口游乐场：** miss.claude 会坐在标题栏上晃腿，走到边缘探头，拖窗时张手平衡，轻急停后踉跄，屈膝后跳到另一个窗口。猛急停仍会被惯性甩飞，脚下窗口消失仍会下落。
 - `"actions"` 挑选小动作：`laptop`、`stocks`、`coin`、`shake`；眼睛部件可以调低 `"gaze"`，让瞳孔留在大眼球里。
 
 运行 `npm run dev`，打开 `http://localhost:1420/preview.html` 可以并排检查几款 Dots 的放大效果和桌面大小。

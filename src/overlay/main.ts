@@ -33,7 +33,7 @@ import { Companion } from './companion';
 import { Minis } from './minis';
 
 /** 这些状态下动作幅度小，可以降帧省电 */
-const CALM_MODES = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin', 'sign']);
+const CALM_MODES = new Set(['idle', 'walk', 'laptop', 'stocks', 'coin', 'sign', 'read', 'write', 'think', 'perch', 'peek']);
 
 /** 固定物理步长：与显示器刷新率无关 */
 const STEP = 1 / 120;
@@ -62,6 +62,7 @@ export interface Telemetry {
   cursor: Vec2 | null;
   /** 站在哪个窗口上（窗口句柄），null = 屏幕边框 */
   support: number | null;
+  canWindowHop: boolean;
   /** 脚下窗口的速度 */
   carrierSpeed: number;
   platforms: number;
@@ -144,7 +145,7 @@ async function main() {
   const applySkin = () => {
     renderer.setSkin(skin);
     loadClips();
-    pet.setGrid(skin.grid, { pixelArt: skin.pixelArt, actions: skin.actions });
+    pet.setGrid(skin.grid, { pixelArt: skin.pixelArt, actions: skin.actions, windowPlay: skin.windowPlay });
     minis.restyle();
     particles.fluffColor = skin.palette.body ?? skin.parts[0].hex;
   };
@@ -358,7 +359,7 @@ async function main() {
   let paused = false;
   let stepFrames = 0;
   let debugPing = -Infinity;
-  const skinList = SKINS.map(({ id, name }) => ({ id, name }));
+  const skinList = SKINS.map(({ id, name, category }) => ({ id, name, category: category ?? 'creature' as const }));
   const publishState = () =>
     bus.emit('tuning-state', {
       tuning,
@@ -366,6 +367,7 @@ async function main() {
       paused,
       skins: skinList,
       skin: skin.id,
+      category: skin.category ?? 'creature',
       actions: skin.actions,
       clips: Object.keys(skin.clips ?? {}),
     });
@@ -658,6 +660,7 @@ async function main() {
         hover: hover || drag !== null,
         cursor,
         support: pet.support?.id ?? null,
+        canWindowHop: pet.canWindowHop,
         carrierSpeed: Math.hypot(pet.carrier.vx, pet.carrier.vy),
         platforms: pet.platforms.length,
         screen: world.indexOf(pet.screen) + 1,
