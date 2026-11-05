@@ -21,12 +21,8 @@ It also keeps an eye on your AI agent: Claude Code, Codex, DeepSeek Harness or A
 
 | | | | |
 | :---: | :---: | :---: | :---: |
-| ![Clawd jumps](skins/clawd/gif/clawd-jump.gif) | ![Clawd tumbles](skins/clawd/gif/clawd-tumble.gif) | ![Clawd looks around](skins/clawd/gif/clawd-look.gif) | ![Clawd gets zapped](skins/clawd/gif/clawd-zap.gif) |
-| **Clawd** | | | > < |
-| ![Clawd? thinking](skins/clawd-dsh/gif/clawd-dsh-think.gif) | ![Clawd? gets zapped](skins/clawd-dsh/gif/clawd-dsh-zap.gif) | ![DeepSeek-chan typing](skins/deepseek/gif/deepseek-laptop.gif) | ![DeepSeek-chan being petted](skins/deepseek/gif/deepseek-pet.gif) |
-| **Clawd?** thinking | **Clawd?** zapped | **DeepSeek-chan** at work | petted |
-| ![DeepSeek-chan jumps](skins/deepseek/gif/deepseek-jump.gif) | ![DeepSeek-chan stretches](skins/deepseek/gif/deepseek-stretch.gif) | | |
-| flung | stretch break | | |
+| <img src="skins/clawd/gif/clawd-jump.gif" alt="Clawd jumps" height="150"> | <img src="skins/clawd-dsh/gif/clawd-dsh-think.gif" alt="Clawd? thinking" height="150"> | <img src="skins/deepseek/gif/deepseek-laptop.gif" alt="DeepSeek-chan typing" height="150"> | <img src="skins/miss-claude/gif/miss-claude-pet.gif" alt="miss.claude being petted" height="150"> |
+| **Clawd** jumping | **Clawd?** thinking | **DeepSeek-chan** at work | **miss.claude** head pats |
 
 </div>
 
