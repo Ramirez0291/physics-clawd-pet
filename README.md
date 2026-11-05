@@ -101,6 +101,8 @@ Menus, the Assistant window and what the pet says follow your system language: C
 
 ### Tuning panel
 
+The panel opens with just the everyday controls. Use **Physics / Behavior / Appearance** for the rest; parameter groups expand one at a time, and search looks across every category. **Action menu** opens a categorized popup for activities, window play, reminders and test throws. Detailed telemetry and JSON tools stay folded away until needed.
+
 Everything about the feel is adjustable live: gravity, bounciness, landing thresholds, walking speed, size and 60+ other parameters, plus slow motion, pause and single-step, repeatable test throws and "replay last throw". **Save** writes `tuning.json` under `%APPDATA%\com.physicsclawdpet.desktop\` (Windows) or `~/Library/Application Support/com.physicsclawdpet.desktop/` (macOS).
 
 ### Build from source
@@ -229,6 +231,8 @@ The engine code is released under the [MIT License](LICENSE). The characters are
 菜单、小助手窗口和它说的话都跟随系统语言：中文、日文（日文版的 Clawd 是只大阪螃蟹，说关西腔）或英文。调教面板目前只有中文。
 
 ### 调教面板
+
+首页只放常用调节，其他参数在 **物理 / 行为 / 外观** 分类中按组展开，搜索会查找全部分类。点 **动作菜单**，在分类弹框里选择日常互动、窗口玩耍、提醒或测试投掷，执行后菜单自动收起。详细状态、JSON 导入导出等工具也收起来了，需要时再打开。
 
 手感全都能实时调：重力、弹性、落地分级阈值、走路速度、大小等 60 多个参数，还有慢动作、暂停和单步、可重复的测试投掷、"重放上次投掷"。点 **保存** 写进 `tuning.json`：Windows 在 `%APPDATA%\com.physicsclawdpet.desktop\`，macOS 在 `~/Library/Application Support/com.physicsclawdpet.desktop/`。
 

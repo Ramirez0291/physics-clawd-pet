@@ -157,7 +157,7 @@ async function main() {
     const del = el('button', { type: 'button', className: 'icon-btn', textContent: '×', title: W.delete });
     del.setAttribute('aria-label', W.delete);
     del.onclick = () => change((d) => (d.todos = d.todos.filter((x) => x.id !== t.id)));
-    return el('li', { className: t.done ? 'done' : '' }, check, el('div', { className: 'grow' }, text), due, del);
+    return el('li', { className: t.done ? 'todo done' : 'todo' }, check, el('div', { className: 'grow' }, text), due, del);
   };
 
   const renderTodos = () => {

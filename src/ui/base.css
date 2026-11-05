@@ -1,0 +1,189 @@
+/*
+ * 调教面板和小助手共用的基础样式，视觉取自 Rami0291 Delivery 设计系统。
+ * 颜色是原值；字号按桌面面板换算（系统的画布是 1920×1080）。
+ *
+ * 对齐规则：内容共用一对左右边线（16px）和一套 4 栏网格（.grid4）。
+ * 主区的滚动条常驻占 8px，右内边距相应减 8px，所以有没有滚动条边线都不动。
+ */
+@font-face {
+  font-family: 'JetBrains Mono';
+  /* 这个文件是被 @import 的，开发模式下相对路径会按页面地址解析，所以写根路径 */
+  src: url('/src/ui/fonts/JetBrainsMono-Variable-latin.woff2') format('woff2');
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+:root {
+  /* paper */
+  --bg: #f4f1e8;
+  --panel: #ebe7da;
+  --fg: #2a2d27;
+  --bright: #11130f;
+  --muted: #6e7166;
+  --note: #585b51;
+  --line: #d7d1c1;
+  --rule: #7f8276;
+  --amber: #9a5800;
+  --amber-soft: #f1e3c6;
+  --green: #2b7a3a;
+  --red: #b42318;
+  --on-fill: #f4f1e8;
+
+  /* 简体字优先用雅黑：日文系统的 system-ui 没有这些字形，会一行里混两种字体 */
+  --font-sans: 'Noto Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Menlo, Consolas, var(--font-sans);
+  --type-title: 700 18px/24px var(--font-sans);
+  --type-head: 700 13px/20px var(--font-sans);
+  --type-body: 400 13px/20px var(--font-sans);
+  --type-note: 400 12px/16px var(--font-sans);
+  --type-data: 500 12px/16px var(--font-mono);
+  --type-label: 500 11px/16px var(--font-mono);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --control: 32px;
+  --scrollbar: 8px;
+  color-scheme: light;
+}
+/* 日文系统里汉字要用日文字形（直、骨、令……），字体栈按 <html lang> 切换 */
+:root:lang(ja) {
+  --font-sans: 'Noto Sans JP', 'Yu Gothic UI', 'Meiryo UI', 'Hiragino Sans', system-ui, sans-serif;
+}
+:root:lang(en) {
+  --font-sans: system-ui, 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* terminal */
+    --bg: #0c0e0d;
+    --panel: #131614;
+    --fg: #d6dbd4;
+    --bright: #f3f5f1;
+    --muted: #7d857e;
+    --note: #8b938c;
+    --line: #262b27;
+    --rule: #646c65;
+    --amber: #f2b33d;
+    --amber-soft: #2a2210;
+    --green: #7bd88f;
+    --red: #ff7a70;
+    --on-fill: #0c0e0d;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; border-radius: 0; }
+[hidden], .hidden { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+  font: var(--type-body);
+}
+h1, h2, p { margin: 0; }
+::-webkit-scrollbar { width: var(--scrollbar); height: var(--scrollbar); }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--rule); }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow-y: scroll;
+  padding: var(--space-3) calc(var(--space-4) - var(--scrollbar)) var(--space-4) var(--space-4);
+}
+main > * { flex: none; }
+
+.grid4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  align-items: center;
+}
+.span2 { grid-column: span 2; }
+.span3 { grid-column: span 3; }
+.span4 { grid-column: span 4; }
+.field-label { min-width: 0; font: var(--type-note); color: var(--note); }
+
+/* ---------- 控件 ---------- */
+
+button, select, input, textarea { margin: 0; font: inherit; color: var(--fg); }
+button, select, .control {
+  height: var(--control);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--rule);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button:hover:not(:disabled), select:hover, .control:hover { border-color: var(--amber); color: var(--bright); }
+button:disabled { color: var(--muted); border-color: var(--line); cursor: default; }
+button.primary { background: var(--amber); border-color: var(--amber); color: var(--on-fill); font-weight: 700; }
+button.primary:hover:not(:disabled) { color: var(--on-fill); }
+button.primary:disabled { background: transparent; border-color: var(--line); color: var(--muted); }
+
+select {
+  width: 100%;
+  padding: 0 var(--space-4) 0 var(--space-2);
+  appearance: none;
+  background-color: var(--bg);
+  background-image: linear-gradient(45deg, transparent 50%, var(--note) 50%), linear-gradient(135deg, var(--note) 50%, transparent 50%);
+  background-position: right 12px center, right 8px center;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+}
+input[type='text'], input[type='url'], input[type='search'], input[type='datetime-local'], input[type='number'] {
+  min-width: 0;
+  width: 100%;
+  height: var(--control);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--rule);
+  background: transparent;
+}
+input::placeholder, textarea::placeholder { color: var(--note); }
+input[type='number'] { appearance: textfield; font: var(--type-data); text-align: right; }
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button { appearance: none; margin: 0; }
+
+/* 方形勾选框：选中时里面是一个实心方块 */
+input[type='checkbox'] {
+  appearance: none;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--rule);
+  background: transparent;
+  cursor: pointer;
+}
+input[type='checkbox']:hover { border-color: var(--amber); }
+input[type='checkbox']:checked { background: var(--amber); border-color: var(--amber); box-shadow: inset 0 0 0 3px var(--bg); }
+
+/* ---------- 标签页 ---------- */
+
+.tabs button {
+  height: var(--control);
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: var(--note);
+  text-align: left;
+}
+.tabs button::before { content: '>'; margin-right: var(--space-1); font: var(--type-label); color: transparent; }
+.tabs button:hover:not(:disabled) { color: var(--bright); }
+.tabs button[aria-selected='true'] { border-bottom: 2px solid var(--bright); color: var(--bright); font-weight: 700; }
+.tabs button[aria-selected='true']::before { color: var(--amber); }
+
+/* 标签长短或数量会变时从左排，不进栏 */
+.tabs.track { display: flex; gap: var(--space-3); border-bottom: 1px solid var(--rule); }
+.tabs.track button { border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs.track button[aria-selected='true'] { border-bottom-color: var(--bright); }
