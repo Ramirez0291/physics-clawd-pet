@@ -96,27 +96,28 @@ fn content_lines(text: &str) -> impl Iterator<Item = &str> {
 }
 
 fn read(path: &Path) -> Result<String, String> {
-    if !path.exists() {
-        return Ok(String::new());
-    }
-    let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(e) => return Err(format!("Read {}: {e}", path.display())),
+    };
     let text = String::from_utf8(bytes).map_err(|_| format!("{}: not UTF-8, left unchanged", path.display()))?;
     Ok(text.trim_start_matches('\u{feff}').to_string())
 }
 
 fn write(path: &Path, text: &str) -> Result<(), String> {
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(dir).map_err(|e| format!("Create {}: {e}", dir.display()))?;
     }
     // 只备份用户原来的文件：已经有我们那一段的（插件升级、改设置）不再备份
     let backup = path.with_extension("yml.clawd-backup");
     let untouched = read(path).is_ok_and(|t| split(&t).1.is_none());
     if path.exists() && untouched && !backup.exists() {
-        std::fs::copy(path, &backup).map_err(|e| e.to_string())?;
+        std::fs::copy(path, &backup).map_err(|e| format!("Back up {}: {e}", path.display()))?;
     }
     let tmp = path.with_extension("yml.clawd-tmp");
-    std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+    std::fs::write(&tmp, text).map_err(|e| format!("Write {}: {e}", tmp.display()))?;
+    std::fs::rename(&tmp, path).map_err(|e| format!("Save {}: {e}", path.display()))
 }
 
 fn install_into(home: &Path, token: &str, permission: bool) -> Result<(), String> {
@@ -141,7 +142,7 @@ fn install_into(home: &Path, token: &str, permission: bool) -> Result<(), String
     text.push_str(&block(&plugin, token, permission));
     // 先放插件再改补丁：DSH 一看到补丁变了就会去加载它
     if let Some(dir) = plugin.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(dir).map_err(|e| format!("Create {}: {e}", dir.display()))?;
     }
     std::fs::write(&plugin, PLUGIN).map_err(|e| format!("{}: {e}", plugin.display()))?;
     write(&patch, &text)?;

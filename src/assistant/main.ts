@@ -366,9 +366,11 @@ async function main() {
     state.textContent = linkText(text);
     state.className = cls;
     state.style.whiteSpace = 'pre-line';
-    toggle.textContent = h.installed ? (h.current ? W.ccDisable : W.ccReinstall) : W.ccEnable;
-    toggle.className = h.installed && h.current ? '' : 'primary';
+    const canDisable = h.installed && (h.current || !!cc.bridge_error);
+    toggle.textContent = canDisable ? W.ccDisable : h.installed ? W.ccReinstall : W.ccEnable;
+    toggle.className = canDisable ? '' : 'primary';
     toggle.disabled = !!cc.bridge_error && !h.installed;
+    permBox.disabled = !!cc.bridge_error;
     $('ccHint').textContent = (provider === 'codex' ? W.codexHint : provider === 'dsh' ? W.dshHint : provider === 'agy' ? W.agyHint : W.ccHint)(h.settings_path);
     const permLabel = permBox.parentElement?.querySelector('span');
     if (permLabel) permLabel.textContent = linkText(W.ccPermission);
@@ -422,7 +424,7 @@ async function main() {
     const selected = provider;
     $<HTMLButtonElement>('ccToggle').disabled = true;
     try {
-      if (cc?.hooks.installed && cc.hooks.current) {
+      if (cc?.hooks.installed && (cc.hooks.current || cc.bridge_error)) {
         await api[selected].uninstall();
         bus.emit('cc-disconnect', selected);
       } else await api[selected].install(permBox.checked);

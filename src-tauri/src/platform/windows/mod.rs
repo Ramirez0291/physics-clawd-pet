@@ -37,6 +37,14 @@ pub fn tray_template_icon() -> Option<tauri::image::Image<'static>> {
     None
 }
 
+pub fn show_startup_problem(title: &str, message: &str) {
+    use windows::core::HSTRING;
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONWARNING, MB_OK, MB_SETFOREGROUND};
+    unsafe {
+        MessageBoxW(None, &HSTRING::from(message), &HSTRING::from(title), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND)
+    };
+}
+
 /// 不进任务栏、不抢焦点在建窗口时就设好了。这里只做一件事：
 /// 覆盖层横跨缩放不同的几块屏幕，挪动后它的 DPI 可能变，系统会发 WM_DPICHANGED，
 /// tao 收到就按"逻辑尺寸不变"把窗口缩放一下——覆盖层就不再正好盖住那几块屏幕了。

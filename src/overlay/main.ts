@@ -222,13 +222,14 @@ async function main() {
   };
 
   /** 按 screens（和"模拟双屏"开关）重新拼世界 */
-  const applyScreens = () => {
+  const applyScreens = (previousDisplayCenter?: { x: number; y: number }) => {
     const primary = screens.find((s) => s.primary) ?? screens[0];
     const sim = !!tuning.simScreens && screens.length === 1;
     world = sim ? simulateScreens(primary) : [primary, ...screens.filter((s) => s !== primary)];
     const w = buildWorld(world);
-    // 宠物所在的屏幕没了（被全屏程序占了、拔掉了）：从主屏上空掉下来
-    const lost = !screenAt(w, pet.pos.x, pet.pos.y) && pet.mode !== 'held';
+    // 任务栏展开时，宠物可能暂时在工作区外。屏幕还在就让 setWorld 把它推回边界。
+    const displayRemains = previousDisplayCenter && screenAt(w, previousDisplayCenter.x, previousDisplayCenter.y);
+    const lost = !displayRemains && !screenAt(w, pet.pos.x, pet.pos.y) && pet.mode !== 'held';
     pet.setWorld(w);
     pet.setPlatforms(clipToScreens(rawPlatforms, world, MIN_PLATFORM));
     if (lost) dropHome();
@@ -237,9 +238,13 @@ async function main() {
 
   let gotScreens = false;
   host.onScreens((msg) => {
+    const { left, right, top, bottom } = pet.screen;
+    const displayCenter = { x: (left + right) / 2, y: (top + bottom) / 2 };
     if (msg.remap) {
       // 覆盖层挪了：所有东西换到新坐标
       const { k, dx, dy } = msg.remap;
+      displayCenter.x = displayCenter.x * k + dx;
+      displayCenter.y = displayCenter.y * k + dy;
       pet.remap(k, dx, dy);
       minis.remap(k, dx, dy);
       particles.clear();
@@ -253,7 +258,7 @@ async function main() {
       }
     }
     if (msg.screens.length) screens = msg.screens;
-    applyScreens();
+    applyScreens(displayCenter);
     if (!gotScreens) {
       // 开场：从主屏上空掉下来（覆盖层可能横跨好几块屏幕，正中间不一定是主屏）
       gotScreens = true;

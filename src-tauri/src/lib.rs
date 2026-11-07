@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -16,6 +16,7 @@ mod dsh;
 mod input;
 mod lang;
 mod platform;
+mod startup;
 mod watcher;
 
 use watcher::{DeskState, Shared, OVERLAY};
@@ -58,7 +59,9 @@ fn create_overlay(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         None => {
             let monitor = match app.primary_monitor()? {
                 Some(m) => m,
-                None => app.available_monitors()?.into_iter().next().expect("no monitor found"),
+                None => app.available_monitors()?.into_iter().next().ok_or_else(|| {
+                    tauri::Error::Io(std::io::Error::other("No monitor found"))
+                })?,
             };
             let (pos, size) = (monitor.work_area().position, monitor.work_area().size);
             let work = desktop::Rect {
@@ -230,41 +233,41 @@ fn show_assistant(app: &AppHandle) -> tauri::Result<()> {
 
 /// 配置目录（%APPDATA%\com.physicsclawdpet.desktop）里的一个 JSON 文件
 fn config_path(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
-    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let dir = app.path().app_config_dir().map_err(|e| format!("Resolve config directory: {e}"))?;
     Ok(dir.join(name))
 }
 
-fn load_json(app: &AppHandle, name: &str) -> Result<Option<serde_json::Value>, String> {
-    let path = config_path(app, name)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&text).map(Some).map_err(|e| e.to_string())
+fn load_json(path: &Path) -> Result<Option<serde_json::Value>, String> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("Read {}: {e}", path.display())),
+    };
+    serde_json::from_str(&text).map(Some).map_err(|e| format!("Parse {}: {e}", path.display()))
 }
 
 /// 先写临时文件再改名：写到一半退出也不会把原来的文件弄坏
-fn save_json(app: &AppHandle, name: &str, value: &serde_json::Value) -> Result<PathBuf, String> {
-    let path = config_path(app, name)?;
+fn save_json(path: &Path, value: &serde_json::Value) -> Result<(), String> {
     if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        fs::create_dir_all(dir).map_err(|e| format!("Create config directory {}: {e}", dir.display()))?;
     }
     let text = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, text).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
-    Ok(path)
+    fs::write(&tmp, text).map_err(|e| format!("Write {}: {e}", tmp.display()))?;
+    fs::rename(&tmp, path).map_err(|e| format!("Save {}: {e}", path.display()))
 }
 
 #[tauri::command]
 fn load_tuning(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
-    load_json(&app, "tuning.json")
+    load_json(&config_path(&app, "tuning.json")?)
 }
 
 /// 返回保存的路径，调教面板会显示出来方便找到文件。
 #[tauri::command]
 fn save_tuning(app: AppHandle, tuning: serde_json::Value) -> Result<String, String> {
-    save_json(&app, "tuning.json", &tuning).map(|p| p.display().to_string())
+    let path = config_path(&app, "tuning.json")?;
+    save_json(&path, &tuning)?;
+    Ok(path.display().to_string())
 }
 
 // ---------- 小助手 ----------
@@ -272,15 +275,15 @@ fn save_tuning(app: AppHandle, tuning: serde_json::Value) -> Result<String, Stri
 // ---------- Claude Code 联动 ----------
 
 /// 桥接令牌：第一次用时生成，存在配置目录里（hooks 的命令行里也带着它）
-fn bridge_token(app: &AppHandle) -> String {
-    if let Ok(Some(v)) = load_json(app, "claude-bridge.json") {
+fn bridge_token(path: &Path) -> Result<String, String> {
+    if let Some(v) = load_json(path)? {
         if let Some(t) = v.get("token").and_then(|t| t.as_str()).filter(|t| t.len() >= 16) {
-            return t.to_string();
+            return Ok(t.to_string());
         }
     }
     let token = claude::new_token();
-    let _ = save_json(app, "claude-bridge.json", &serde_json::json!({ "token": token }));
-    token
+    save_json(path, &serde_json::json!({ "token": token }))?;
+    Ok(token)
 }
 
 #[derive(serde::Serialize)]
@@ -296,7 +299,7 @@ struct CcStatus {
 #[tauri::command]
 fn cc_status(bridge: State<Arc<claude::Bridge>>, token: State<BridgeToken>) -> CcStatus {
     CcStatus {
-        hooks: claude::status(&token.0),
+        hooks: claude::status(token.get().unwrap_or_default()),
         port: claude::PORT,
         bridge_error: bridge.error.lock().unwrap().clone(),
         last_event: bridge.last_event.load(std::sync::atomic::Ordering::Relaxed),
@@ -305,7 +308,7 @@ fn cc_status(bridge: State<Arc<claude::Bridge>>, token: State<BridgeToken>) -> C
 
 #[tauri::command]
 fn cc_install(token: State<BridgeToken>, permission: bool) -> Result<(), String> {
-    claude::install(&token.0, permission)
+    claude::install(token.get()?, permission)
 }
 
 #[tauri::command]
@@ -316,7 +319,7 @@ fn cc_uninstall() -> Result<(), String> {
 #[tauri::command]
 fn codex_status(bridge: State<Arc<claude::Bridge>>, token: State<BridgeToken>) -> CcStatus {
     CcStatus {
-        hooks: codex::status(&token.0),
+        hooks: codex::status(token.get().unwrap_or_default()),
         port: claude::PORT,
         bridge_error: bridge.error.lock().unwrap().clone(),
         last_event: bridge.last_codex_event.load(std::sync::atomic::Ordering::Relaxed),
@@ -325,7 +328,7 @@ fn codex_status(bridge: State<Arc<claude::Bridge>>, token: State<BridgeToken>) -
 
 #[tauri::command]
 fn codex_install(token: State<BridgeToken>, permission: bool) -> Result<(), String> {
-    codex::install(&token.0, permission)
+    codex::install(token.get()?, permission)
 }
 
 #[tauri::command]
@@ -336,7 +339,7 @@ fn codex_uninstall() -> Result<(), String> {
 #[tauri::command]
 fn dsh_status(bridge: State<Arc<claude::Bridge>>, token: State<BridgeToken>) -> CcStatus {
     CcStatus {
-        hooks: dsh::status(&token.0),
+        hooks: dsh::status(token.get().unwrap_or_default()),
         port: claude::PORT,
         bridge_error: bridge.error.lock().unwrap().clone(),
         last_event: bridge.last_dsh_event.load(std::sync::atomic::Ordering::Relaxed),
@@ -345,7 +348,7 @@ fn dsh_status(bridge: State<Arc<claude::Bridge>>, token: State<BridgeToken>) -> 
 
 #[tauri::command]
 fn dsh_install(token: State<BridgeToken>, permission: bool) -> Result<(), String> {
-    dsh::install(&token.0, permission)
+    dsh::install(token.get()?, permission)
 }
 
 #[tauri::command]
@@ -356,7 +359,7 @@ fn dsh_uninstall() -> Result<(), String> {
 #[tauri::command]
 fn agy_status(bridge: State<Arc<claude::Bridge>>, token: State<BridgeToken>) -> CcStatus {
     CcStatus {
-        hooks: agy::status(&token.0),
+        hooks: agy::status(token.get().unwrap_or_default()),
         port: claude::PORT,
         bridge_error: bridge.error.lock().unwrap().clone(),
         last_event: bridge.last_agy_event.load(std::sync::atomic::Ordering::Relaxed),
@@ -365,7 +368,7 @@ fn agy_status(bridge: State<Arc<claude::Bridge>>, token: State<BridgeToken>) -> 
 
 #[tauri::command]
 fn agy_install(token: State<BridgeToken>, permission: bool) -> Result<(), String> {
-    agy::install(&token.0, permission)
+    agy::install(token.get()?, permission)
 }
 
 #[tauri::command]
@@ -379,17 +382,23 @@ fn cc_decide(bridge: State<Arc<claude::Bridge>>, id: u64, behavior: String) -> b
     bridge.decide(id, &behavior)
 }
 
-struct BridgeToken(String);
+struct BridgeToken(Result<String, String>);
+
+impl BridgeToken {
+    fn get(&self) -> Result<&str, &str> {
+        self.0.as_deref().map_err(String::as_str)
+    }
+}
 
 #[tauri::command]
 fn load_assistant(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
-    load_json(&app, "assistant.json")
+    load_json(&config_path(&app, "assistant.json")?)
 }
 
 /// 保存后广播给所有窗口（覆盖层跑提醒、小助手窗口显示）
 #[tauri::command]
 fn save_assistant(app: AppHandle, data: serde_json::Value) -> Result<(), String> {
-    save_json(&app, "assistant.json", &data)?;
+    save_json(&config_path(&app, "assistant.json")?, &data)?;
     app.emit("assistant-data", data).map_err(|e| e.to_string())
 }
 
@@ -631,8 +640,69 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         builder = builder.icon(icon).icon_as_template(true);
     } else if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
+    } else {
+        return Err(tauri::Error::Io(std::io::Error::other("Tray icon asset missing")));
     }
     builder.build(app)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn check_tray_registration(app: AppHandle) {
+    std::thread::spawn(move || {
+        // tray-icon keeps its window alive after a failed NIM_ADD and retries on TaskbarCreated.
+        // Give Explorer time to start, then check with NIM_MODIFY, which also works for overflow icons.
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        let Some(tray) = app.tray_by_id("main") else { return };
+        let name = app.state::<TrayItems>().name.lock().unwrap().clone();
+        if let Err(e) = tray.set_tooltip(Some(&name)) {
+            startup::report(&format!("Windows notification area did not accept the Clawd Pet icon (Shell_NotifyIcon): {e}"));
+        }
+    });
+}
+
+fn refresh_hook(name: &str, status: claude::HookStatus, install: impl FnOnce(bool) -> Result<(), String>) {
+    if let Some(e) = status.error {
+        let _ = startup::log(&format!("Check {name} link ({}): {e}", status.settings_path));
+    } else if status.installed && !status.current {
+        if let Err(e) = install(status.permission) {
+            let _ = startup::log(&format!("Update {name} link ({}): {e}", status.settings_path));
+        }
+    }
+}
+
+fn setup_app(handle: &AppHandle) -> Result<(), String> {
+    let token = BridgeToken(config_path(handle, "claude-bridge.json").and_then(|path| bridge_token(&path)));
+    let bridge = claude::Bridge::new(token.get().unwrap_or_default().to_string());
+    match token.get() {
+        Ok(token) => {
+            bridge.start(handle.clone());
+            if let Some(error) = bridge.error.lock().unwrap().as_deref() {
+                let _ = startup::log(error);
+            }
+            // 装过 hooks 但程序换了位置（开发版 ↔ 安装版）就自动更新。
+            refresh_hook("Claude Code", claude::status(token), |p| claude::install(token, p));
+            refresh_hook("Codex", codex::status(token), |p| codex::install(token, p));
+            refresh_hook("DeepSeek Harness", dsh::status(token), |p| dsh::install(token, p));
+            refresh_hook("Antigravity", agy::status(token), |p| agy::install(token, p));
+        }
+        Err(e) => {
+            let error = format!("AI bridge token: {e}");
+            startup::report(&error);
+            *bridge.error.lock().unwrap() = Some(error);
+        }
+    }
+    handle.manage(bridge);
+    handle.manage(token);
+
+    // 托盘先建好：覆盖层一加载就会调 tray_set_skins。
+    build_tray(handle).map_err(|e| format!("Create tray icon/menu: {e}"))?;
+    create_overlay(handle).map_err(|e| format!("Create pet overlay: {e}"))?;
+    #[cfg(windows)]
+    check_tray_registration(handle.clone());
+    // 开发时直接打开调教面板，调手感最常用。
+    #[cfg(debug_assertions)]
+    show_debug(handle).map_err(|e| format!("Open tuning panel: {e}"))?;
     Ok(())
 }
 
@@ -674,37 +744,38 @@ pub fn run() {
             cc_decide
         ])
         .setup(|app| {
-            let handle = app.handle();
-            // Claude Code 联动：本机桥接服务；装过 hooks 但程序换了位置（开发版 ↔ 安装版）就自动更新
-            let token = bridge_token(handle);
-            let bridge = claude::Bridge::new(token.clone());
-            bridge.start(handle.clone());
-            let st = claude::status(&token);
-            if st.installed && !st.current {
-                let _ = claude::install(&token, st.permission);
+            if let Err(e) = setup_app(app.handle()) {
+                startup::report(&e);
+                app.handle().exit(1);
             }
-            let st = codex::status(&token);
-            if st.installed && !st.current {
-                let _ = codex::install(&token, st.permission);
-            }
-            let st = dsh::status(&token);
-            if st.installed && !st.current {
-                let _ = dsh::install(&token, st.permission);
-            }
-            let st = agy::status(&token);
-            if st.installed && !st.current {
-                let _ = agy::install(&token, st.permission);
-            }
-            app.manage(bridge);
-            app.manage(BridgeToken(token));
-            // 托盘先建好：覆盖层一加载就会调 tray_set_skins
-            build_tray(handle)?;
-            create_overlay(handle)?;
-            // 开发时直接打开调教面板，调手感最常用
-            #[cfg(debug_assertions)]
-            show_debug(handle)?;
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .unwrap_or_else(|e| {
+            startup::report(&format!("Start Clawd Pet: {e}"));
+            std::process::exit(1);
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bridge_token_requires_a_successful_save_and_reuses_it_on_retry() {
+        let dir = std::env::temp_dir().join(format!("clawd-config-test-{}", claude::new_token()));
+        let path = dir.join("claude-bridge.json");
+        let tmp = path.with_extension("json.tmp");
+        // A directory occupying the temporary filename makes the write fail on both platforms.
+        fs::create_dir_all(&tmp).unwrap();
+        let error = bridge_token(&path).unwrap_err();
+        assert!(error.starts_with("Write ") && error.contains("claude-bridge.json.tmp"));
+        assert!(!path.exists());
+
+        fs::remove_dir(&tmp).unwrap();
+        let token = bridge_token(&path).unwrap();
+        assert_eq!(bridge_token(&path).unwrap(), token);
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
 }

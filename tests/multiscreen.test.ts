@@ -227,6 +227,14 @@ describe('跨屏幕', () => {
 });
 
 describe('屏幕变化', () => {
+  it('任务栏在脚下展开时，宠物留在原处并站回任务栏上方', () => {
+    const pet = makePet([box(0, 0, 1000, 600)]);
+    pet.placeOnFloor(750);
+    pet.setScreens([box(0, 0, 1000, 552)]);
+    expect(pet.pos.x).toBeCloseTo(750);
+    expect(feet(pet)).toBeCloseTo(552);
+  });
+
   it('preserves a held pet across Retina/1x viewport changes and release', () => {
     const mac = box(0, 33, 1728, 1056);
     const lg = box(-868, -1440, 2572, 0);

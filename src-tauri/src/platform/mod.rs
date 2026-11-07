@@ -15,6 +15,9 @@ mod imp;
 #[cfg(not(any(windows, target_os = "macos")))]
 compile_error!("只支持 Windows 和 macOS");
 
+#[cfg(windows)]
+pub use imp::show_startup_problem;
+
 pub use imp::{
     // 进程、界面语言、窗口
     ancestor_pids,

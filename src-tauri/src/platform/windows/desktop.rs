@@ -3,7 +3,7 @@
 
 use std::mem::size_of;
 
-use windows::core::BOOL;
+use windows::core::{w, BOOL, PCWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{
     DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
@@ -16,7 +16,7 @@ use windows::Win32::UI::Shell::{
     SHQueryUserNotificationState, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindow, GetWindowLongPtrW,
+    EnumWindows, FindWindowExW, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindow, GetWindowLongPtrW,
     GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible, IsZoomed, GWL_EXSTYLE, GWL_STYLE,
     GW_OWNER, WS_CAPTION, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
@@ -42,24 +42,89 @@ pub fn cursor_pos() -> Option<(i32, i32)> {
 const MONITORINFOF_PRIMARY: u32 = 1;
 
 unsafe extern "system" fn collect_monitor(m: HMONITOR, _: HDC, _: *mut RECT, lparam: LPARAM) -> BOOL {
-    let out = &mut *(lparam.0 as *mut Vec<Screen>);
+    let out = &mut *(lparam.0 as *mut Vec<(HMONITOR, Screen)>);
     let mut mi = MONITORINFO { cbSize: size_of::<MONITORINFO>() as u32, ..Default::default() };
     if GetMonitorInfoW(m, &mut mi).as_bool() {
-        out.push(Screen {
+        out.push((m, Screen {
             monitor: mi.rcMonitor.into(),
             work: mi.rcWork.into(),
             primary: mi.dwFlags & MONITORINFOF_PRIMARY != 0,
-        });
+        }));
     }
     BOOL(1)
 }
 
+fn enumerate_monitors() -> Vec<(HMONITOR, Screen)> {
+    let mut monitors: Vec<(HMONITOR, Screen)> = Vec::new();
+    let _ = unsafe {
+        EnumDisplayMonitors(None, None, Some(collect_monitor), LPARAM(&mut monitors as *mut _ as isize))
+    };
+    monitors
+}
+
 /// 所有显示器（物理像素），主屏排第一个。复制模式（两块屏显示同样内容）系统只报一块。
 pub fn screens() -> Vec<Screen> {
-    let mut out: Vec<Screen> = Vec::new();
-    let _ = unsafe { EnumDisplayMonitors(None, None, Some(collect_monitor), LPARAM(&mut out as *mut Vec<Screen> as isize)) };
+    let mut monitors = enumerate_monitors();
+    // rcWork can still cover a visible taskbar, e.g. when an auto-hide bar is open.
+    // Read Explorer's primary and secondary taskbars and retain any other rcWork insets.
+    for class in [w!("Shell_TrayWnd"), w!("Shell_SecondaryTrayWnd")] {
+        let mut after = None;
+        while let Ok(h) = unsafe { FindWindowExW(None, after, class, PCWSTR::null()) } {
+            after = Some(h);
+            if let Some(bar) = frame_bounds(h.0 as isize) {
+                let monitor = unsafe { MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) };
+                if let Some((_, screen)) = monitors.iter_mut().find(|(m, _)| *m == monitor) {
+                    screen.work = exclude_taskbar(screen.work, screen.monitor, bar);
+                }
+            }
+        }
+    }
+    let mut out: Vec<_> = monitors.into_iter().map(|(_, screen)| screen).collect();
     out.sort_by_key(|s| !s.primary);
     out
+}
+
+fn exclude_taskbar(work: Rect, monitor: Rect, bar: Rect) -> Rect {
+    let mut clipped = work;
+    let width = bar.right.min(monitor.right) - bar.left.max(monitor.left);
+    let height = bar.bottom.min(monitor.bottom) - bar.top.max(monitor.top);
+    // An auto-hidden bar leaves a small activation strip. Only reserve space for the open bar.
+    if bar.width() > bar.height() && width * 2 >= monitor.width() && height * 2 >= bar.height() {
+        if bar.bottom >= monitor.bottom && bar.top > monitor.top {
+            clipped.bottom = work.bottom.min(bar.top);
+        } else if bar.top <= monitor.top && bar.bottom < monitor.bottom {
+            clipped.top = work.top.max(bar.bottom);
+        }
+    } else if bar.height() > bar.width() && height * 2 >= monitor.height() && width * 2 >= bar.width() {
+        if bar.right >= monitor.right && bar.left > monitor.left {
+            clipped.right = work.right.min(bar.left);
+        } else if bar.left <= monitor.left && bar.right < monitor.right {
+            clipped.left = work.left.max(bar.right);
+        }
+    }
+    if clipped.width() > 0 && clipped.height() > 0 { clipped } else { work }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MONITOR: Rect = Rect { left: -1920, top: 0, right: 0, bottom: 1080 };
+
+    #[test]
+    fn visible_taskbar_limits_work_area_without_discarding_other_insets() {
+        let work = Rect { top: 24, ..MONITOR };
+        let bar = Rect { top: 1032, ..MONITOR };
+        assert_eq!(exclude_taskbar(work, MONITOR, bar), Rect { bottom: 1032, ..work });
+        let bar = Rect { left: -48, ..MONITOR };
+        assert_eq!(exclude_taskbar(work, MONITOR, bar), Rect { right: -48, ..work });
+    }
+
+    #[test]
+    fn hidden_taskbar_does_not_move_the_floor() {
+        let bar = Rect { top: 1078, bottom: 1126, ..MONITOR };
+        assert_eq!(exclude_taskbar(MONITOR, MONITOR, bar), MONITOR);
+    }
 }
 
 pub fn window_scale(id: isize) -> f64 {
@@ -213,7 +278,7 @@ pub fn fullscreen_monitors(skip: isize) -> Vec<Rect> {
             }
         }
     }
-    let mut undecided: Vec<Rect> = screens().iter().map(|s| s.monitor).filter(|m| !out.contains(m)).collect();
+    let mut undecided: Vec<Rect> = enumerate_monitors().into_iter().map(|(_, s)| s.monitor).filter(|m| !out.contains(m)).collect();
     let mut handles: Vec<isize> = Vec::with_capacity(256);
     let _ = unsafe { EnumWindows(Some(collect), LPARAM(&mut handles as *mut Vec<isize> as isize)) };
     for id in handles {
