@@ -139,12 +139,17 @@ describe.each(SKINS.map((s) => [s.id, s] as const))('皮肤 %s', (_id, skin) => 
     expect(pet.pos.y + pet.halfH).toBeCloseTo(H);
   });
 
-  it('电脑底座贴着网格底边', () => {
+  it('电脑使用原画姿势或贴地的程序化道具', () => {
     if (!skin.actions.includes('laptop')) return;
     const pet = makePet(skin);
     expect(pet.perform('laptop')).toBe(true);
     run(pet, 1);
-    const props = computePose(pet, skin).props;
+    const { motion, props } = computePose(pet, skin);
+    if (skin.motions?.laptop) {
+      expect(motion).toBe('laptop');
+      expect(props).toHaveLength(0);
+      return;
+    }
     expect(props.length).toBeGreaterThan(0);
     const bottom = Math.max(...props.map((p) => p.y + p.h));
     expect(bottom).toBeCloseTo(skin.grid[1]);

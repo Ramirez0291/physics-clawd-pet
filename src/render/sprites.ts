@@ -14,6 +14,26 @@ function trace(g: CanvasRenderingContext2D, polygon: Polygon, ox: number, oy: nu
   g.closePath();
 }
 
+/** 把描边外沿混进 RGB 的白底还原为透明度，保留轮廓里面的白色衣饰。 */
+function removePaperFringe(data: ImageData) {
+  const { width: w, height: h, data: rgba } = data;
+  const alpha = Uint8Array.from({ length: w * h }, (_, i) => rgba[i * 4 + 3]);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    if (!alpha[i]) continue;
+    if (x > 0 && x < w - 1 && y > 0 && y < h - 1 &&
+      alpha[i - 1] >= 32 && alpha[i + 1] >= 32 && alpha[i - w] >= 32 && alpha[i + w] >= 32) continue;
+    const o = i * 4;
+    const lo = Math.min(rgba[o], rgba[o + 1], rgba[o + 2]);
+    const hi = Math.max(rgba[o], rgba[o + 1], rgba[o + 2]);
+    if (lo <= 70 || hi - lo > 100) continue;
+    const coverage = (255 - lo) / (255 - 45);
+    rgba[o + 3] = coverage < 0.3 ? 0 : alpha[i] * coverage;
+    if (!rgba[o + 3]) continue;
+    for (let c = 0; c < 3; c++) rgba[o + c] = 255 - (255 - rgba[o + c]) / coverage;
+  }
+}
+
 export function imagePiece(def: PartImage): HTMLCanvasElement | null {
   const cached = pieces.get(def);
   if (cached) return cached;
@@ -39,7 +59,7 @@ export function imagePiece(def: PartImage): HTMLCanvasElement | null {
   }
   g.drawImage(source, x, y, w, h, 0, 0, w, h);
   g.restore();
-  if (def.matte === 'paper') {
+  if (def.matte === 'paper' || def.matte === 'paper-outline') {
     // 设定图作为原生动作图集读取：仅在显示裁片时去掉与外部连通的纸色。
     // 黑色闭合描边保护衣服、眼白和呆毛，不修改或另存参考图。
     const data = g.getImageData(0, 0, w, h);
@@ -65,6 +85,16 @@ export function imagePiece(def: PartImage): HTMLCanvasElement | null {
       if (y) visit(i - w);
       if (y + 1 < h) visit(i + w);
     }
+    for (const [hx, hy, hw, hh] of def.paperHoles ?? []) {
+      for (let j = Math.max(0, hy - y); j < Math.min(h, hy + hh - y); j++) {
+        for (let i = Math.max(0, hx - x); i < Math.min(w, hx + hw - x); i++) {
+          const o = (j * w + i) * 4;
+          const r = data.data[o], green = data.data[o + 1], b = data.data[o + 2];
+          if (Math.min(r, green, b) > 145 && Math.max(r, green, b) - Math.min(r, green, b) < 75) data.data[o + 3] = 0;
+        }
+      }
+    }
+    if (def.matte === 'paper-outline') removePaperFringe(data);
     // 裁片边缘偶尔碰到说明文字的一两个像素。只丢弃主体以外的微小孤点；
     // 心形、气泡及气泡内部的省略号都保留。
     seen.fill(0);
@@ -139,6 +169,14 @@ export function imagePiece(def: PartImage): HTMLCanvasElement | null {
     g.fill();
   }
   g.globalCompositeOperation = 'source-over';
+  if (def.sampleStep && def.sampleStep > 1) {
+    const sampled = document.createElement('canvas');
+    sampled.width = Math.max(1, Math.round(w / def.sampleStep));
+    sampled.height = Math.max(1, Math.round(h / def.sampleStep));
+    sampled.getContext('2d')!.drawImage(canvas, 0, 0, sampled.width, sampled.height);
+    pieces.set(def, sampled);
+    return sampled;
+  }
   pieces.set(def, canvas);
   return canvas;
 }

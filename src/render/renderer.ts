@@ -442,13 +442,19 @@ export class Renderer {
     const frame = frames[index];
     const floor = Math.max(...frames.map((f) => f.box.y + f.box.h));
     const top = Math.min(...frames.map((f) => f.box.y));
-    const size = skin.grid[1] * motion.height / (floor - top);
+    const { crop, registration } = motion.frames[index];
+    const size = registration?.[2] ?? skin.grid[1] * motion.height / (floor - top);
     const bob = locomotion ? -Math.abs(Math.sin(time * rate * Math.PI / 2)) * 0.12 : pose.motion === 'love' ? -Math.sin(time * 2.4) * 0.06 : 0;
     const w = frame.box.w * size, h = frame.box.h * size;
     const rolling = pet.mode === 'roll';
-    const x = -w / 2; // 图集各格留白不完全相同，统一主体中心，防止换帧时左右跳动。
-    const seat = pet.support ? (1 - (motion.anchorY ?? 1)) * (floor - top) * size : 0;
-    const y = rolling ? -h / 2 : skin.grid[1] / 2 + (frame.box.y - floor) * size + bob + seat;
+    // 标定过的裁片按头身和接触线对齐，尾巴和特效不会带着人物变大或横移。
+    const x = registration
+      ? (frame.box.x - (registration[0] - crop[0]) * frame.image.width / crop[2]) * size
+      : -w / 2;
+    const contact = registration
+      ? (registration[1] - crop[1]) * frame.image.height / crop[3]
+      : floor - (pet.support ? (1 - (motion.anchorY ?? 1)) * (floor - top) : 0);
+    const y = rolling ? -h / 2 : skin.grid[1] / 2 + (frame.box.y - contact) * size + bob;
     const mirror = motionMirrored(motion, pet.side, pet.dir);
     const x0 = mirror ? -x - w : x;
     const corners = [[x0, y], [x0 + w, y], [x0, y + h], [x0 + w, y + h]].map(([a, b]) => apply(m, a, b));

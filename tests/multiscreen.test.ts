@@ -235,6 +235,20 @@ describe('屏幕变化', () => {
     expect(feet(pet)).toBeCloseTo(552);
   });
 
+  it('拎到屏幕底边把任务栏顶出来，松手后落回任务栏上方', () => {
+    // 小号宠物：半高比任务栏矮，松手时中心已经在新地面下面
+    const pet = makePet([box(0, 0, 1000, 600)], { petScale: 2 });
+    pet.placeOnFloor(500);
+    pet.grab(pet.pos.x, pet.pos.y);
+    pet.moveHold(500, 599, 0, 0);
+    run(pet, 0.3);
+    pet.setScreens([box(0, 0, 1000, 552)]);
+    pet.release(0, 800, false);
+    run(pet, 2);
+    expect(pet.grounded).toBe(true);
+    expect(feet(pet)).toBeCloseTo(552);
+  });
+
   it('preserves a held pet across Retina/1x viewport changes and release', () => {
     const mac = box(0, 33, 1728, 1056);
     const lg = box(-868, -1440, 2572, 0);

@@ -1,0 +1,48 @@
+name: 问题反馈 / Bug report
+description: 报告桌宠、任务栏、托盘或联动的问题 / Report a problem with Clawd Pet
+title: "[Bug] "
+body:
+  - type: input
+    id: app-version
+    attributes:
+      label: 桌宠版本 / Clawd Pet version
+      placeholder: v2.6.2
+    validations:
+      required: true
+
+  - type: input
+    id: system
+    attributes:
+      label: 操作系统和版本 / OS and version
+      description: Windows 可以按 Win + R，输入 `winver` 查看版本。 On Windows, press Win + R and enter `winver`.
+      placeholder: Windows 11 23H2 (22631.5335) / macOS 15.5
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 当时发生了什么 / What happened?
+      description: 写一下出问题前做了什么、看到了什么，以及再做一次会不会出现。 What did you do, what did you see, and does it happen again?
+      placeholder: |
+        例：刚打开桌宠，或甩出去落地时，宠物掉到了任务栏下面。
+        Example: The pet drops behind the taskbar when I launch the app or after a throw.
+    validations:
+      required: true
+
+  - type: textarea
+    id: display
+    attributes:
+      label: 显示器和任务栏 / Displays and taskbar
+      description: |
+        遇到显示位置问题时，写一下有几块屏幕、出问题的是哪块、那块屏幕的分辨率和缩放，以及任务栏或程序坞在哪一边、会不会自动隐藏。如果是刚弹出来时盖住桌宠，完全展开后等两秒，桌宠还在下面吗？
+        For positioning issues, include the number of displays, the affected display's resolution and scaling, and the taskbar or Dock position and auto-hide setting. If the bar covers the pet as it appears, is the pet still underneath two seconds later?
+      placeholder: 两块屏，副屏 2560×1440、150% 缩放，任务栏在底部，自动隐藏已开启。
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 截图、短视频或报错 / Screenshot, clip, or error
+      description: |
+        有图或视频的话，可以直接拖进来。反馈钻地时，尽量让桌宠和任务栏都在画面里。Windows 启动或托盘报错也可以贴弹窗文字，或者从 `%TEMP%\clawd-pet-startup.log` 复制相关几行。
+        Drag in a screenshot or short clip if you have one. For taskbar issues, try to show the pet and the bar together. For Windows startup or tray errors, paste the dialog text or the relevant lines from `%TEMP%\clawd-pet-startup.log`.

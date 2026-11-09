@@ -1,0 +1,1222 @@
+{
+  "id": "blue-whale",
+  "name": "蓝色大肥鱼",
+  "category": "humanoid",
+  "description": "深海女仆鲸鱼娘的原图像素帧，保留蓝色长发、环形呆毛、白色女仆头饰、鳍耳、围裙与鲸尾。",
+  "grid": [
+    20,
+    24
+  ],
+  "render": "sprite",
+  "windowPlay": true,
+  "palette": {
+    "body": "#475eaa"
+  },
+  "actions": [
+    "laptop",
+    "read",
+    "think",
+    "perch",
+    "peek",
+    "hop"
+  ],
+  "parts": [
+    {
+      "id": "body",
+      "role": "body",
+      "rect": [
+        0.08000000000000007,
+        0.4400000000000013,
+        19.84,
+        23.56
+      ],
+      "image": {
+        "src": "reference.png",
+        "crop": [
+          343,
+          204,
+          78,
+          92
+        ],
+        "matte": "paper-outline",
+        "sampleStep": 2.45,
+        "paperHoles": [
+          [
+            363,
+            210,
+            20,
+            11
+          ]
+        ]
+      }
+    }
+  ],
+  "motions": {
+    "walk": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            640,
+            50,
+            66,
+            89
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.3,
+          "registration": [
+            669,
+            136,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              656,
+              55,
+              13,
+              8
+            ]
+          ]
+        },
+        {
+          "crop": [
+            706,
+            50,
+            66,
+            89
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.3,
+          "registration": [
+            733,
+            136,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              720,
+              55,
+              14,
+              8
+            ]
+          ]
+        },
+        {
+          "crop": [
+            772,
+            50,
+            63,
+            89
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.3,
+          "registration": [
+            799,
+            135,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              785,
+              54,
+              14,
+              8
+            ]
+          ]
+        },
+        {
+          "crop": [
+            835,
+            50,
+            68,
+            89
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.3,
+          "registration": [
+            864,
+            136,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              849,
+              55,
+              15,
+              8
+            ]
+          ]
+        }
+      ],
+      "directional": true,
+      "facing": -1,
+      "fps": 6
+    },
+    "love": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            545,
+            874,
+            94,
+            102
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.45,
+          "registration": [
+            595,
+            971,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              577,
+              893,
+              17,
+              8
+            ]
+          ]
+        }
+      ]
+    },
+    "read": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            1230,
+            370,
+            95,
+            96
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.55,
+          "registration": [
+            1269,
+            463,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              1252,
+              376,
+              19,
+              11
+            ]
+          ]
+        }
+      ]
+    },
+    "laptop": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            1062,
+            883,
+            98,
+            94
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.35,
+          "registration": [
+            1102,
+            969,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              1084,
+              893,
+              19,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    "think": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            1128,
+            373,
+            89,
+            94
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.5,
+          "registration": [
+            1163,
+            461,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              1146,
+              380,
+              19,
+              10
+            ]
+          ],
+          "polygon": [
+            [
+              1128,
+              373
+            ],
+            [
+              1186,
+              373
+            ],
+            [
+              1191,
+              391
+            ],
+            [
+              1217,
+              401
+            ],
+            [
+              1217,
+              467
+            ],
+            [
+              1128,
+              467
+            ]
+          ]
+        }
+      ]
+    },
+    "held": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            453,
+            723,
+            99,
+            80
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.4,
+          "registration": [
+            494,
+            801,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              484,
+              729,
+              17,
+              9
+            ]
+          ],
+          "polygon": [
+            [
+              453,
+              723
+            ],
+            [
+              508,
+              723
+            ],
+            [
+              509,
+              741
+            ],
+            [
+              515,
+              752
+            ],
+            [
+              527,
+              764
+            ],
+            [
+              550,
+              768
+            ],
+            [
+              552,
+              803
+            ],
+            [
+              453,
+              803
+            ]
+          ]
+        }
+      ],
+      "directional": true,
+      "facing": -1
+    },
+    "air": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            1010,
+            529,
+            93,
+            99
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.33,
+          "registration": [
+            1051,
+            626,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              1035,
+              535,
+              18,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    "roll": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            1220,
+            737,
+            101,
+            63
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.35,
+          "registration": [
+            1269,
+            799,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              1231,
+              751,
+              13,
+              12
+            ]
+          ],
+          "polygon": [
+            [
+              1220,
+              737
+            ],
+            [
+              1264,
+              737
+            ],
+            [
+              1270,
+              742
+            ],
+            [
+              1298,
+              743
+            ],
+            [
+              1321,
+              746
+            ],
+            [
+              1321,
+              800
+            ],
+            [
+              1220,
+              800
+            ]
+          ]
+        }
+      ]
+    },
+    "land": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            578,
+            706,
+            98,
+            94
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.35,
+          "registration": [
+            626,
+            797,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              612,
+              725,
+              16,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    "hero": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            578,
+            706,
+            98,
+            94
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.35,
+          "registration": [
+            626,
+            797,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              612,
+              725,
+              16,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    "splat": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            544,
+            386,
+            116,
+            78
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.4,
+          "registration": [
+            584,
+            459,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              565,
+              394,
+              19,
+              12
+            ]
+          ]
+        }
+      ]
+    },
+    "cling": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            640,
+            50,
+            66,
+            89
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.3,
+          "registration": [
+            669,
+            136,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              656,
+              55,
+              13,
+              8
+            ]
+          ]
+        },
+        {
+          "crop": [
+            706,
+            50,
+            66,
+            89
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.3,
+          "registration": [
+            733,
+            136,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              720,
+              55,
+              14,
+              8
+            ]
+          ]
+        },
+        {
+          "crop": [
+            772,
+            50,
+            63,
+            89
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.3,
+          "registration": [
+            799,
+            135,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              785,
+              54,
+              14,
+              8
+            ]
+          ]
+        },
+        {
+          "crop": [
+            835,
+            50,
+            68,
+            89
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.3,
+          "registration": [
+            864,
+            136,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              849,
+              55,
+              15,
+              8
+            ]
+          ]
+        }
+      ],
+      "directional": true,
+      "facing": -1,
+      "fps": 3
+    },
+    "stretch": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            343,
+            204,
+            78,
+            92
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.45,
+          "registration": [
+            382,
+            296,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              363,
+              210,
+              20,
+              11
+            ]
+          ]
+        },
+        {
+          "crop": [
+            901,
+            366,
+            96,
+            101
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.4,
+          "registration": [
+            948,
+            463,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              920,
+              371,
+              19,
+              13
+            ]
+          ],
+          "polygon": [
+            [
+              901,
+              366
+            ],
+            [
+              962,
+              366
+            ],
+            [
+              966,
+              394
+            ],
+            [
+              997,
+              400
+            ],
+            [
+              997,
+              467
+            ],
+            [
+              901,
+              467
+            ]
+          ]
+        },
+        {
+          "crop": [
+            901,
+            366,
+            96,
+            101
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.4,
+          "registration": [
+            948,
+            463,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              920,
+              371,
+              19,
+              13
+            ]
+          ],
+          "polygon": [
+            [
+              901,
+              366
+            ],
+            [
+              962,
+              366
+            ],
+            [
+              966,
+              394
+            ],
+            [
+              997,
+              400
+            ],
+            [
+              997,
+              467
+            ],
+            [
+              901,
+              467
+            ]
+          ]
+        },
+        {
+          "crop": [
+            343,
+            204,
+            78,
+            92
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.45,
+          "registration": [
+            382,
+            296,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              363,
+              210,
+              20,
+              11
+            ]
+          ]
+        }
+      ],
+      "fps": 1.25,
+      "loop": false
+    },
+    "perch": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            339,
+            372,
+            86,
+            96
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.45,
+          "registration": [
+            379,
+            454,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              366,
+              381,
+              15,
+              8
+            ]
+          ]
+        },
+        {
+          "crop": [
+            432,
+            370,
+            102,
+            98
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.45,
+          "registration": [
+            482,
+            448,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              467,
+              375,
+              19,
+              11
+            ]
+          ]
+        }
+      ],
+      "fps": 2
+    },
+    "peek": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            841,
+            719,
+            102,
+            79
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.33,
+          "registration": [
+            875,
+            793,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              861,
+              725,
+              17,
+              8
+            ]
+          ],
+          "polygon": [
+            [
+              841,
+              719
+            ],
+            [
+              943,
+              719
+            ],
+            [
+              943,
+              788
+            ],
+            [
+              917,
+              788
+            ],
+            [
+              905,
+              791
+            ],
+            [
+              888,
+              791
+            ],
+            [
+              888,
+              793
+            ],
+            [
+              847,
+              793
+            ],
+            [
+              847,
+              789
+            ],
+            [
+              841,
+              789
+            ]
+          ]
+        }
+      ],
+      "directional": true,
+      "facing": -1
+    },
+    "balance": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            901,
+            366,
+            96,
+            101
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.4,
+          "registration": [
+            948,
+            463,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              920,
+              371,
+              19,
+              13
+            ]
+          ],
+          "polygon": [
+            [
+              901,
+              366
+            ],
+            [
+              962,
+              366
+            ],
+            [
+              966,
+              394
+            ],
+            [
+              997,
+              400
+            ],
+            [
+              997,
+              467
+            ],
+            [
+              901,
+              467
+            ]
+          ]
+        }
+      ],
+      "directional": true,
+      "facing": 1
+    },
+    "stumble": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            730,
+            201,
+            85,
+            96
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.45,
+          "registration": [
+            770,
+            294,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              751,
+              205,
+              20,
+              13
+            ]
+          ],
+          "polygon": [
+            [
+              730,
+              201
+            ],
+            [
+              785,
+              201
+            ],
+            [
+              789,
+              221
+            ],
+            [
+              815,
+              229
+            ],
+            [
+              815,
+              297
+            ],
+            [
+              730,
+              297
+            ]
+          ]
+        },
+        {
+          "crop": [
+            578,
+            706,
+            98,
+            94
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.35,
+          "registration": [
+            626,
+            797,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              612,
+              725,
+              16,
+              10
+            ]
+          ]
+        }
+      ],
+      "fps": 2.5,
+      "loop": false
+    },
+    "hop": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            578,
+            706,
+            98,
+            94
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.35,
+          "registration": [
+            626,
+            797,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              612,
+              725,
+              16,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    "windowLeap": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            1010,
+            529,
+            93,
+            99
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.33,
+          "registration": [
+            1051,
+            626,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              1035,
+              535,
+              18,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    "windowLand": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            890,
+            540,
+            115,
+            103
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.4,
+          "registration": [
+            943,
+            643,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              933,
+              559,
+              18,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    "windowDrop": {
+      "src": "reference.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            730,
+            201,
+            85,
+            96
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.45,
+          "registration": [
+            770,
+            294,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              751,
+              205,
+              20,
+              13
+            ]
+          ],
+          "polygon": [
+            [
+              730,
+              201
+            ],
+            [
+              785,
+              201
+            ],
+            [
+              789,
+              221
+            ],
+            [
+              815,
+              229
+            ],
+            [
+              815,
+              297
+            ],
+            [
+              730,
+              297
+            ]
+          ]
+        },
+        {
+          "crop": [
+            1010,
+            529,
+            93,
+            99
+          ],
+          "matte": "paper-outline",
+          "sampleStep": 2.33,
+          "registration": [
+            1051,
+            626,
+            0.62
+          ],
+          "paperHoles": [
+            [
+              1035,
+              535,
+              18,
+              10
+            ]
+          ]
+        }
+      ],
+      "fps": 2.6,
+      "loop": false
+    }
+  }
+}

@@ -551,6 +551,9 @@ pub(crate) fn sync_input_permission(app: &AppHandle) {
 /// 托盘"大小"菜单的预设（px/格），id 是 "size:<值>"；名字在 Texts::presets 里
 const SIZE_PRESETS: [f64; 4] = [4.0, 6.0, 9.0, 12.0];
 
+#[cfg(windows)]
+const WINDOWS_TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("icons/32x32.png");
+
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let t = texts();
     // 形象列表和带名字的菜单文字等覆盖层加载好后由 tray_set_skins 填上
@@ -638,10 +641,16 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     // 系统会自己上色的单色图标（macOS 菜单栏），没有就用应用图标
     if let Some(icon) = platform::tray_template_icon() {
         builder = builder.icon(icon).icon_as_template(true);
-    } else if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
     } else {
-        return Err(tauri::Error::Io(std::io::Error::other("Tray icon asset missing")));
+        // Use the bundled small PNG on Windows, independent of the default window icon
+        // that Tauri extracts and scales from the executable at startup.
+        #[cfg(windows)]
+        let icon = WINDOWS_TRAY_ICON;
+        #[cfg(not(windows))]
+        let icon = app.default_window_icon().cloned().ok_or_else(|| {
+            tauri::Error::Io(std::io::Error::other("Tray icon asset missing"))
+        })?;
+        builder = builder.icon(icon);
     }
     builder.build(app)?;
     Ok(())
@@ -649,16 +658,41 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
 #[cfg(windows)]
 fn check_tray_registration(app: AppHandle) {
+    use std::time::Duration;
+
     std::thread::spawn(move || {
-        // tray-icon keeps its window alive after a failed NIM_ADD and retries on TaskbarCreated.
-        // Give Explorer time to start, then check with NIM_MODIFY, which also works for overflow icons.
-        std::thread::sleep(std::time::Duration::from_secs(4));
+        // Explorer may still be starting. tray-icon retries registration on TaskbarCreated.
+        std::thread::sleep(Duration::from_secs(4));
         let Some(tray) = app.tray_by_id("main") else { return };
-        let name = app.state::<TrayItems>().name.lock().unwrap().clone();
-        if let Err(e) = tray.set_tooltip(Some(&name)) {
-            startup::report(&format!("Windows notification area did not accept the Clawd Pet icon (Shell_NotifyIcon): {e}"));
+        // A successful NIM_MODIFY alone doesn't mean Explorer can locate the icon.
+        if matches!(tray.rect(), Ok(Some(_))) {
+            return;
+        }
+        // Try attaching the icon again. Unlike the builder, set_icon surfaces conversion errors.
+        let update = tray.set_icon(Some(WINDOWS_TRAY_ICON));
+        std::thread::sleep(Duration::from_secs(1));
+        let detail = match tray.rect() {
+            Ok(Some(_)) => return,
+            Ok(None) => "Shell_NotifyIconGetRect returned no rectangle".into(),
+            Err(e) => format!("Could not query the tray icon rectangle: {e}"),
+        };
+        if let Err(e) = update {
+            report_tray_problem(&format!("Windows tray icon: {detail}. set_icon failed: {e}"));
+        } else {
+            // The shell doesn't guarantee a rectangle for every tray state. Log this without a dialog.
+            let _ = startup::log(&format!("Windows tray icon: {detail} after set_icon succeeded"));
         }
     });
+}
+
+#[cfg(windows)]
+fn report_tray_problem(error: &str) {
+    let hint = lang::tr(
+        "右键点击桌宠，可以打开调教面板。",
+        "デスクトップペットを右クリックすると調整パネルが開きます。",
+        "Right-click the pet to open the tuning panel.",
+    );
+    startup::report(&format!("{error}\n\n{hint}"));
 }
 
 fn refresh_hook(name: &str, status: claude::HookStatus, install: impl FnOnce(bool) -> Result<(), String>) {
@@ -696,10 +730,15 @@ fn setup_app(handle: &AppHandle) -> Result<(), String> {
     handle.manage(token);
 
     // 托盘先建好：覆盖层一加载就会调 tray_set_skins。
-    build_tray(handle).map_err(|e| format!("Create tray icon/menu: {e}"))?;
+    let tray = build_tray(handle).map_err(|e| format!("Create tray icon/menu: {e}"));
+    #[cfg(not(windows))]
+    tray?;
     create_overlay(handle).map_err(|e| format!("Create pet overlay: {e}"))?;
     #[cfg(windows)]
-    check_tray_registration(handle.clone());
+    match tray {
+        Ok(()) => check_tray_registration(handle.clone()),
+        Err(e) => report_tray_problem(&e),
+    }
     // 开发时直接打开调教面板，调手感最常用。
     #[cfg(debug_assertions)]
     show_debug(handle).map_err(|e| format!("Open tuning panel: {e}"))?;

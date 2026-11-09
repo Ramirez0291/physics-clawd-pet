@@ -16,6 +16,7 @@ export function adaptHumanoidPose(pet: Pet, skin: Skin, pose: Pose): Pose {
   pose.torso.sx = clamp(pose.torso.sx, 0.94, 1.06);
   pose.torso.sy = clamp(pose.torso.sy, 0.9, 1.08);
   switch (pet.mode) {
+    case 'laptop': motion = 'laptop'; break;
     case 'walk':
       motion = 'walk';
       pose.torso.dy = -Math.abs(Math.sin(phase)) * 0.14;

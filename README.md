@@ -27,13 +27,13 @@ Clawd is a desktop pet you can pick up and throw. A gentle toss and it lands on 
 - **Windows 10 / 11** · 运行文件名以 `-setup.exe` 结尾的安装包。桌宠需要 WebView2，Windows 11 自带。
 - **macOS** · 打开 `.dmg`，把 Clawd Pet 拖进「应用程序」。应用还没有经过 Apple 公证。如果首次打开时被拦住，去「系统设置 → 隐私与安全性」点「仍要打开」。 [Apple 的操作说明](https://support.apple.com/zh-cn/102445)
 
-Windows 右下角没看见图标，先点时钟旁边的 **^** 看看。遇到启动弹窗，发一张截图就行。日志也可以从资源管理器打开，地址是 `%TEMP%\clawd-pet-startup.log`。
+Windows 右下角没看见图标，先点时钟旁边的 **^** 看看。还找不到就**右键点桌宠**打开调教面板，里面可以换形象、调大小，也能进小助手。要反馈托盘问题，可以发弹窗截图，或者从资源管理器打开 `%TEMP%\clawd-pet-startup.log`，把相关那几行发过来。
 
 ### 怎么玩
 
 平时 Clawd 沿着任务栏走，到了 Mac 上就沿着程序坞那一边走。光标从它面前经过，眼睛也跟着转。在它头上来回晃两下就是摸头。抓住一条腿，它会倒过来晃。松手时鼠标带点速度，就能把它甩出去。撞上墙或天花板，它有时会贴住，再蹬一脚翻下来。
 
-它也会把窗口的标题栏当落脚点。等它站上去，慢慢拖动窗口，它就跟着走。拖快了突然停手，窗口刹住了，它还在飞。miss.claude 会坐在标题栏上晃腿，也会探头看看下面，再屈膝跳到旁边的窗口。
+它也会把窗口的标题栏当落脚点。等它站上去，慢慢拖动窗口，它就跟着走。拖快了突然停手，窗口刹住了，它还在飞。miss.claude 和蓝色大肥鱼会坐在标题栏上晃腿，也会探头看看下面，再屈膝跳到旁边的窗口。 [蓝色大肥鱼](skins/blue-whale/README.md)
 
 几块屏幕它都能逛，哪块在全屏打游戏或放视频，它就绕开哪块。点到桌宠外面，点击照样交给原来的窗口。它也能避开你正在打字的输入框。Mac 上要先从菜单栏打开「避开正在输入的文本框…」，再授予辅助功能权限。
 
@@ -97,7 +97,7 @@ Installers are on [Releases](https://github.com/Ramirez0291/physics-clawd-pet/re
 - **Windows 10 / 11** · Run the installer whose filename ends in `-setup.exe`. Clawd needs WebView2, which comes with Windows 11.
 - **macOS** · Open the `.dmg` and drag Clawd Pet into Applications. The app is distributed without Apple notarization. If macOS blocks the first launch, go to System Settings → Privacy & Security and choose **Open Anyway**. [Apple’s instructions](https://support.apple.com/en-us/102445)
 
-On Windows, check the **^** beside the clock if you can’t find the tray icon. If you get a startup error, send a screenshot or open `%TEMP%\clawd-pet-startup.log` in File Explorer and share the matching entry.
+On Windows, check the **^** beside the clock if you can’t find the tray icon. If it’s missing there too, **right-click the pet** to open the tuning panel. You can switch characters, change size and open Assistant from there. To report a tray problem, share a screenshot of the error dialog or open `%TEMP%\clawd-pet-startup.log` in File Explorer and share the matching lines.
 
 ### Playing with Clawd
 

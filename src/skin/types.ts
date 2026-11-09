@@ -22,12 +22,12 @@ export const PART_SHAPES: readonly PartShape[] = ['rect', 'ellipse', 'cloud', 'p
 
 export type Polygon = [number, number][];
 export type SkinCategory = 'creature' | 'humanoid';
-export type MotionName = 'walk' | 'love' | 'read' | 'write' | 'think' | 'held' | 'air' | 'roll' | 'land' | 'hero' | 'splat' | 'cling' | 'stretch' | 'perch' | 'peek' | 'balance' | 'stumble' | 'hop' | 'windowLeap' | 'windowLand' | 'windowDrop';
-export const MOTIONS: readonly MotionName[] = ['walk', 'love', 'read', 'write', 'think', 'held', 'air', 'roll', 'land', 'hero', 'splat', 'cling', 'stretch', 'perch', 'peek', 'balance', 'stumble', 'hop', 'windowLeap', 'windowLand', 'windowDrop'];
+export type MotionName = 'walk' | 'love' | 'laptop' | 'read' | 'write' | 'think' | 'held' | 'air' | 'roll' | 'land' | 'hero' | 'splat' | 'cling' | 'stretch' | 'perch' | 'peek' | 'balance' | 'stumble' | 'hop' | 'windowLeap' | 'windowLand' | 'windowDrop';
+export const MOTIONS: readonly MotionName[] = ['walk', 'love', 'laptop', 'read', 'write', 'think', 'held', 'air', 'roll', 'land', 'hero', 'splat', 'cling', 'stretch', 'perch', 'peek', 'balance', 'stumble', 'hop', 'windowLeap', 'windowLand', 'windowDrop'];
 
 export interface SkinMotion {
   src: string;
-  frames: ImageRegion[];
+  frames: MotionRegion[];
   fps?: number;
   /** false 时播到末帧停住，适合起手→伸展→收手这类一次性动作。 */
   loop?: boolean;
@@ -40,12 +40,20 @@ export interface SkinMotion {
   facing?: -1 | 1;
 }
 
+export interface MotionRegion extends ImageRegion {
+  /** 原图中的中心与接触线，以及每个采样像素占多少皮肤格。 */
+  registration?: [x: number, y: number, unitsPerPixel: number];
+}
+
 /** 原画贴图部件：坐标全部使用源 PNG 像素，保留原画的细节和透明轮廓。 */
 export interface ImageRegion {
   crop: [number, number, number, number];
   polygon?: Polygon;
-  /** 从米白袖子中剔除旁边的深色衣身，保留细描边。 */
-  matte?: 'light' | 'paper';
+  matte?: 'light' | 'paper' | 'paper-outline';
+  /** 封闭轮廓内的纸色区域，例如环形呆毛中间。范围用原图坐标。 */
+  paperHoles?: [number, number, number, number][];
+  /** 每个输出像素对应的原图像素数。 */
+  sampleStep?: number;
 }
 
 export interface PartImage extends ImageRegion {
@@ -232,6 +240,14 @@ function dominantHex(def: SkinDef, rows: string[]): string {
   return def.palette[def.legend?.[top ?? ''] ?? ''] ?? '#000000';
 }
 
+function validRegion(region: ImageRegion): boolean {
+  const validRect = (r: number[]) => r.length === 4 && r.every(Number.isFinite) && r[0] >= 0 && r[1] >= 0 && r[2] > 0 && r[3] > 0;
+  return validRect(region.crop)
+    && (region.matte === undefined || ['light', 'paper', 'paper-outline'].includes(region.matte))
+    && (region.sampleStep === undefined || (Number.isFinite(region.sampleStep) && region.sampleStep >= 1))
+    && (region.paperHoles ?? []).every(validRect);
+}
+
 export function loadSkin(def: SkinDef): Skin {
   if (def.windowPlay !== undefined && typeof def.windowPlay !== 'boolean') throw new Error('窗口玩法开关不对');
   if (def.category && def.category !== 'creature' && def.category !== 'humanoid') throw new Error(`未知皮肤类别: ${def.category}`);
@@ -240,7 +256,8 @@ export function loadSkin(def: SkinDef): Skin {
     if (motion.loop !== undefined && typeof motion.loop !== 'boolean') throw new Error(`皮肤动作循环配置不对: ${name}`);
     if (motion.anchorY !== undefined && !(motion.anchorY > 0 && motion.anchorY <= 1)) throw new Error(`皮肤动作接触点不对: ${name}`);
     for (const frame of motion.frames) {
-      if (frame.crop.length !== 4 || !frame.crop.every(Number.isFinite) || frame.crop[0] < 0 || frame.crop[1] < 0 || frame.crop[2] <= 0 || frame.crop[3] <= 0 || (frame.matte && frame.matte !== 'paper' && frame.matte !== 'light')) throw new Error(`皮肤动作裁片不对: ${name}`);
+      if (!validRegion(frame)) throw new Error(`皮肤动作裁片不对: ${name}`);
+      if (frame.registration && (frame.registration.length !== 3 || !frame.registration.every(Number.isFinite) || frame.registration[2] <= 0)) throw new Error(`皮肤动作对齐不对: ${name}`);
       if (frame.polygon && (frame.polygon.length < 3 || frame.polygon.some((p) => p.length !== 2 || !p.every(Number.isFinite)))) throw new Error(`皮肤动作轮廓不对: ${name}`);
     }
   }
@@ -259,13 +276,10 @@ export function loadSkin(def: SkinDef): Skin {
     if (p.color === undefined ? !p.pixels && !p.image : !(p.color in def.palette)) throw new Error(`部件 ${p.id} 用了不存在的颜色 ${p.color}`);
     if (p.image) {
       if (render !== 'sprite' || p.pixels) throw new Error(`部件 ${p.id}：原画贴图需要 sprite 画风，不能混用 pixels`);
-      const { src, crop, polygon, cutouts = [], fills = [], cutoutImages = [] } = p.image;
-      if (!src || crop.length !== 4 || !crop.every(Number.isFinite) || crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0) {
-        throw new Error(`部件 ${p.id} 的贴图裁剪范围不对`);
-      }
+      const { src, polygon, cutouts = [], fills = [], cutoutImages = [] } = p.image;
+      if (!src) throw new Error(`部件 ${p.id} 的贴图裁剪范围不对`);
       for (const region of [p.image, ...cutoutImages]) {
-        const r = region.crop;
-        if (r.length !== 4 || !r.every(Number.isFinite) || r[0] < 0 || r[1] < 0 || r[2] <= 0 || r[3] <= 0 || (region.matte !== undefined && region.matte !== 'light' && region.matte !== 'paper')) {
+        if (!validRegion(region)) {
           throw new Error(`部件 ${p.id} 的贴图裁剪范围不对`);
         }
       }

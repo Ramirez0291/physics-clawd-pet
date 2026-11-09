@@ -323,6 +323,12 @@ async function main() {
 
   let drag: { id: number; downAt: number; x0: number; y0: number; moved: number } | null = null;
 
+  canvas.addEventListener('contextmenu', (e) => {
+    if (!isTauri || drag || !renderer.hitTest(e.clientX, e.clientY, tuning.hitPadding)) return;
+    e.preventDefault();
+    void openDebugPanel().catch((error) => console.error('Could not open the tuning panel', error));
+  });
+
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || drag) return;
     if (!renderer.hitTest(e.clientX, e.clientY, tuning.hitPadding)) return;
