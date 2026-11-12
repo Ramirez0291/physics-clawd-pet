@@ -6,7 +6,7 @@ body:
     id: app-version
     attributes:
       label: 桌宠版本 / Clawd Pet version
-      placeholder: v2.6.2
+      placeholder: v2.6.3
     validations:
       required: true
 
@@ -44,5 +44,5 @@ body:
     attributes:
       label: 截图、短视频或报错 / Screenshot, clip, or error
       description: |
-        有图或视频的话，可以直接拖进来。反馈钻地时，尽量让桌宠和任务栏都在画面里。Windows 启动或托盘报错也可以贴弹窗文字，或者从 `%TEMP%\clawd-pet-startup.log` 复制相关几行。
-        Drag in a screenshot or short clip if you have one. For taskbar issues, try to show the pet and the bar together. For Windows startup or tray errors, paste the dialog text or the relevant lines from `%TEMP%\clawd-pet-startup.log`.
+        有图或视频的话，可以直接拖进来。反馈钻地时，尽量让桌宠和任务栏都在画面里。Windows 启动或托盘报错也可以贴弹窗文字。桌宠走丢、跑到窗口后面、启动或托盘报错时，请从 `%TEMP%\clawd-pet-startup.log` 复制相关几行。
+        Drag in a screenshot or short clip if you have one. For taskbar issues, try to show the pet and the bar together. For Windows startup or tray errors, paste the dialog text. If the pet went missing, slipped behind other windows, or hit a startup or tray error, paste the relevant lines from `%TEMP%\clawd-pet-startup.log`.

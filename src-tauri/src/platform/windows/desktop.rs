@@ -62,6 +62,9 @@ fn enumerate_monitors() -> Vec<(HMONITOR, Screen)> {
     monitors
 }
 
+/// 屏幕列表（含任务栏位置）多久看一次：自动隐藏的任务栏弹出来要马上把地面抬上去
+pub const SCREEN_POLL: std::time::Duration = std::time::Duration::from_millis(50);
+
 /// 所有显示器（物理像素），主屏排第一个。复制模式（两块屏显示同样内容）系统只报一块。
 pub fn screens() -> Vec<Screen> {
     let mut monitors = enumerate_monitors();
@@ -228,6 +231,86 @@ pub fn visible_windows(skip: isize) -> Vec<WinInfo> {
         out.push(WinInfo { id, rect, platform });
     }
     out
+}
+
+/// 覆盖层还在不在最上面：丢了 WS_EX_TOPMOST，或者宠物所在的地方被别的程序的窗口盖住了，
+/// 就重新置顶。pet 是宠物的矩形（物理像素）。重新置顶了返回原因（写诊断日志用）。
+///
+/// 被别的"总在最前"窗口（任务管理器、画中画……）盖住也顶回去；但开始菜单、右键菜单、
+/// 托盘弹窗、提示框这类一会儿就关的系统弹层不和它们抢，自己程序的窗口（调教面板）也不抢。
+pub fn keep_on_top(overlay: isize, pet: Option<Rect>) -> Option<String> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, GW_HWNDPREV, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE,
+        WS_EX_TOPMOST,
+    };
+    let h = hwnd(overlay);
+    let ex = unsafe { GetWindowLongPtrW(h, GWL_EXSTYLE) } as u32;
+    let reason = if ex & WS_EX_TOPMOST.0 == 0 {
+        Some("overlay lost WS_EX_TOPMOST".to_string())
+    } else {
+        pet.and_then(|pet| {
+            let mut own_pid = 0u32;
+            unsafe { GetWindowThreadProcessId(h, Some(&mut own_pid)) };
+            let mut above = unsafe { GetWindow(h, GW_HWNDPREV) };
+            // Z 序链表理论上不会成环，保险起见限个数
+            for _ in 0..1024 {
+                let Ok(w) = above else { break };
+                if w.0.is_null() {
+                    break;
+                }
+                if let Some(cover) = covering(w, own_pid, pet) {
+                    return Some(cover);
+                }
+                above = unsafe { GetWindow(w, GW_HWNDPREV) };
+            }
+            None
+        })
+    };
+    if reason.is_some() {
+        let _ = unsafe {
+            SetWindowPos(h, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER)
+        };
+    }
+    reason
+}
+
+/// 一会儿就关的弹层：菜单、Alt+Tab、任务栏缩略图、程序里的 XAML 弹出菜单
+const TRANSIENT_CLASSES: &[&str] = &[
+    "#32768",
+    "MultitaskingViewFrame",
+    "TaskListThumbnailWnd",
+    "Xaml_WindowedPopupClass",
+    "Shell_LightDismissOverlay",
+];
+
+/// Z 序在覆盖层上面的窗口 w 是不是一个盖住了宠物的普通程序窗口
+fn covering(w: HWND, own_pid: u32, pet: Rect) -> Option<String> {
+    use windows::Win32::UI::WindowsAndMessaging::WS_EX_TOPMOST;
+    let r = frame_bounds(w.0 as isize)?;
+    let overlap_w = r.right.min(pet.right) - r.left.max(pet.left);
+    let overlap_h = r.bottom.min(pet.bottom) - r.top.max(pet.top);
+    // 只擦到一点边不算
+    if overlap_w * 4 < pet.width() || overlap_h * 4 < pet.height() {
+        return None;
+    }
+    let ex = unsafe { GetWindowLongPtrW(w, GWL_EXSTYLE) } as u32;
+    if ex & WS_EX_TRANSPARENT.0 != 0 || (ex & WS_EX_TOOLWINDOW.0 != 0 && ex & WS_EX_APPWINDOW.0 == 0) {
+        return None;
+    }
+    let class = class_name(w);
+    if TRANSIENT_CLASSES.contains(&class.as_str())
+        || SHELL_CLASSES.contains(&class.as_str())
+        || NON_PLATFORM_CLASSES.contains(&class.as_str())
+    {
+        return None;
+    }
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(w, Some(&mut pid)) };
+    if pid == own_pid {
+        return None;
+    }
+    let topmost = ex & WS_EX_TOPMOST.0 != 0;
+    Some(format!("pet covered by {} window of class {class}", if topmost { "a topmost" } else { "a normal" }))
 }
 
 /// 按顺序看这些进程（通常是某个进程的父、祖父……），返回第一个拥有可见主窗口的进程的那个窗口。

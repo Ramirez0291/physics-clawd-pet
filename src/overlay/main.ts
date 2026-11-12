@@ -572,16 +572,97 @@ async function main() {
     }
   };
 
+  // ---------- 走丢自救 ----------
+
+  const describe = () => {
+    try {
+      return JSON.stringify({
+        mode: pet.mode,
+        side: pet.side,
+        pos: pet.pos,
+        vel: pet.vel,
+        rot: pet.rot,
+        support: pet.support?.id ?? null,
+        screens: pet.screens,
+        view: [window.innerWidth, window.innerHeight, window.devicePixelRatio],
+      });
+    } catch {
+      return '(state unavailable)';
+    }
+  };
+
+  // 一帧里抛了异常：以前整个循环就停了，宠物定住或者消失。现在记下来接着跑；
+  // 连着出错多半是宠物状态坏了，叫回来重置一下
+  let frameErrors = 0;
+  let errorStreak = 0;
+  const guarded = (fn: () => void) => {
+    try {
+      fn();
+      errorStreak = 0;
+    } catch (e) {
+      console.error(e);
+      if (++frameErrors <= 5) host.log(`frame error: ${e instanceof Error ? (e.stack ?? e.message) : String(e)} state=${describe()}`);
+      if (++errorStreak % 30 === 0) dropHome();
+    }
+  };
+
+  // 宠物跑到所有屏幕外面 2 秒还没回来，或者坐标成了 NaN：自动"叫回来"，记一笔诊断日志。
+  // 在屏幕里却在画布外面（覆盖层的坐标换算对不上）叫回来也没用，只记日志。
+  let outSince: number | null = null;
+  let offViewSince: number | null = null;
+  let watchT = 0;
+  let recalls = 0;
+  let offViewLogs = 0;
+  const watchdog = (now: number) => {
+    if (now - watchT < 250) return;
+    watchT = now;
+    if (pet.mode === 'held') {
+      outSince = offViewSince = null;
+      return;
+    }
+    const { x, y } = pet.pos;
+    const finite = [x, y, pet.vel.x, pet.vel.y, pet.rot].every(Number.isFinite);
+    const m = Math.max(pet.halfW, pet.halfH);
+    const onScreen = finite && pet.screens.some((s) => x >= s.left - m && x <= s.right + m && y >= s.top - m && y <= s.bottom + m);
+    if (!onScreen) {
+      outSince ??= now;
+      if (finite && now - outSince < 2000) return;
+      if (recalls++ < 20) host.log(`pet left every screen, recalled it: ${describe()}`);
+      outSince = null;
+      dropHome();
+      return;
+    }
+    outSince = null;
+    const inView = x >= -m && x <= window.innerWidth + m && y >= -m && y <= window.innerHeight + m;
+    if (inView) {
+      offViewSince = null;
+      return;
+    }
+    offViewSince ??= now;
+    if (now - offViewSince >= 2000 && offViewLogs < 3) {
+      offViewLogs++;
+      offViewSince = null;
+      host.log(`pet is on a screen but outside the overlay canvas: ${describe()}`);
+    }
+  };
+
   const frame = (now: number) => {
     if (dndHidden) {
       last = now;
       // 覆盖层已被隐藏：什么都不算，低频等待恢复
-      bubbles.frame(now);
       setTimeout(() => frame(performance.now()), 250);
+      guarded(() => bubbles.frame(now));
       return;
     }
-    update(now);
-    schedule();
+    guarded(() => {
+      update(now);
+      watchdog(now);
+    });
+    try {
+      schedule();
+    } catch {
+      requestAnimationFrame(frame);
+    }
   };
 
   /** 一帧：算物理、画出来、告诉原生侧可点击区域 */

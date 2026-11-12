@@ -158,14 +158,14 @@ fn run(app: AppHandle, shared: Shared, overlay_id: isize, layout: Layout) {
     // 所有屏幕都被全屏程序占了
     let mut all_fullscreen = false;
     let mut last_layout_check: Option<Instant> = None;
-    // 自动隐藏的任务栏弹出来/缩回去只改工作区，不等每秒一次的布局检查，单独快速看。
+    // 自动隐藏的任务栏弹出来/缩回去只改工作区，不等每秒一次的布局检查，单独按 SCREEN_POLL 看。
     // sampled：上一次采样；applied：上一次布局用的
-    #[cfg(windows)]
     let mut screens_sampled: Vec<Screen> = Vec::new();
-    #[cfg(windows)]
     let mut screens_applied: Vec<Screen> = Vec::new();
-    #[cfg(windows)]
     let mut last_screen_poll: Option<Instant> = None;
+    // 置顶守卫（每秒）：覆盖层被挤到别的窗口后面就顶回来
+    let mut last_topmost_check: Option<Instant> = None;
+    let mut topmost_logs = 0;
 
     let mut ignoring = true;
     let mut hover = false;
@@ -212,20 +212,19 @@ fn run(app: AppHandle, shared: Shared, overlay_id: isize, layout: Layout) {
             }
         }
 
-        // 任务栏（每 50 毫秒）：滑出来要两三百毫秒，等连续两次采样一样、停稳了再换地面，
+        // 任务栏（Windows 每 50 毫秒）：滑出来要两三百毫秒，等连续两次采样一样、停稳了再换地面，
         // 不然覆盖层要跟着缩好几次
-        #[cfg(windows)]
-        let screens_changed = if last_screen_poll.map_or(true, |t| now - t >= Duration::from_millis(50)) {
+        let mut sampled_now: Option<Vec<Screen>> = None;
+        let screens_changed = if last_screen_poll.map_or(true, |t| now - t >= platform::SCREEN_POLL) {
             last_screen_poll = Some(now);
             let s = platform::screens();
             let settled = s == screens_sampled && s != screens_applied;
-            screens_sampled = s;
+            screens_sampled = s.clone();
+            sampled_now = Some(s);
             settled
         } else {
             false
         };
-        #[cfg(not(windows))]
-        let screens_changed = false;
 
         // 屏幕布局（每秒；全屏状态、任务栏变了马上）：插拔显示器、改分辨率/缩放/排列、挪任务栏
         if viewport_changed
@@ -234,11 +233,8 @@ fn run(app: AppHandle, shared: Shared, overlay_id: isize, layout: Layout) {
             || last_layout_check.map_or(true, |t| now - t >= Duration::from_secs(1))
         {
             last_layout_check = Some(now);
-            let list = platform::screens();
-            #[cfg(windows)]
-            {
-                screens_applied = list.clone();
-            }
+            let list = sampled_now.unwrap_or_else(platform::screens);
+            screens_applied = list.clone();
             match desktop::layout(&list, &fullscreen_monitors) {
                 None => all_fullscreen = true,
                 Some(l) => {
@@ -305,6 +301,24 @@ fn run(app: AppHandle, shared: Shared, overlay_id: isize, layout: Layout) {
         if hidden {
             thread::sleep(Duration::from_millis(100));
             continue;
+        }
+
+        // 置顶守卫：拖着的时候不动 Z 序
+        if !dragging && last_topmost_check.map_or(true, |t| now - t >= Duration::from_secs(1)) {
+            last_topmost_check = Some(now);
+            let pet = hits.first().map(|r| Rect {
+                left: geo.area.left + (r[0] * geo.scale).round() as i32,
+                top: geo.area.top + (r[1] * geo.scale).round() as i32,
+                right: geo.area.left + (r[2] * geo.scale).round() as i32,
+                bottom: geo.area.top + (r[3] * geo.scale).round() as i32,
+            });
+            if let Some(reason) = platform::keep_on_top(overlay_id, pet) {
+                // 和别的"总在最前"程序抢的话每秒都会来一次，日志只记前几次
+                if topmost_logs < 5 {
+                    topmost_logs += 1;
+                    let _ = crate::startup::log(&format!("Raised the overlay back to the top: {reason}"));
+                }
+            }
         }
 
         // 光标：决定点击穿透，顺便给眼睛跟随用（限 15Hz，且只在宠物附近）

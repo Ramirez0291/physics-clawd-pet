@@ -105,6 +105,14 @@ fn bounds(d: &WindowInfo) -> Option<CGRect> {
     unsafe { CGRectMakeWithDictionaryRepresentation(Some(&b), &mut r) }.then_some(r)
 }
 
+/// 屏幕列表多久看一次。读 NSScreen 要切到主线程，不能太勤；程序坞、菜单栏不会突然弹出来，每秒一次够了。
+pub const SCREEN_POLL: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// macOS 上覆盖层的窗口层级不会被别的程序改掉，什么都不用做
+pub fn keep_on_top(_overlay: isize, _pet: Option<Rect>) -> Option<String> {
+    None
+}
+
 /// 窗口外框。窗口没了、最小化了、切到别的桌面（Space）了、所在程序被隐藏了时返回 None。
 pub fn frame_bounds(id: isize) -> Option<Rect> {
     if id <= 0 {

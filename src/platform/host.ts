@@ -326,6 +326,8 @@ export interface OverlayHost {
   ready(): void;
   /** 托盘"形象"菜单：可选的皮肤和当前选中的那个 */
   setSkins(list: SkinInfo[], current: string): void;
+  /** 写一行诊断日志（%TEMP%\clawd-pet-startup.log）；浏览器预览里只打到控制台 */
+  log(message: string): void;
 }
 
 export interface SkinInfo {
@@ -383,6 +385,7 @@ export async function createOverlayHost(): Promise<OverlayHost> {
       clock: () => performance.now(),
       ready: () => {},
       setSkins: () => {},
+      log: (message) => console.warn(message),
     };
   }
 
@@ -439,5 +442,6 @@ export async function createOverlayHost(): Promise<OverlayHost> {
     clock: () => (Number.isFinite(offset) ? performance.now() - offset : performance.now()),
     ready: () => void invoke('desk_ready'),
     setSkins: (list, current) => void invoke('tray_set_skins', { skins: list, current }),
+    log: (message) => void invoke('desk_log', { message }).catch(() => {}),
   };
 }

@@ -470,6 +470,13 @@ fn desk_set_carrier(state: State<Shared>, id: Option<i64>) {
     state.lock().unwrap().carrier = id.map(|v| v as isize);
 }
 
+/// 覆盖层发现了不该发生的事（宠物跑出屏幕、一帧里抛了异常），写进诊断日志
+#[tauri::command]
+fn desk_log(message: String) {
+    let message: String = message.chars().take(2000).collect();
+    let _ = startup::log(&format!("overlay: {message}"));
+}
+
 /// 前端（重新）加载完成，请把当前状态全部重发
 #[tauri::command]
 fn desk_ready(state: State<Shared>) {
@@ -760,6 +767,7 @@ pub fn run() {
             desk_set_dragging,
             desk_set_carrier,
             desk_ready,
+            desk_log,
             tray_set_skins,
             load_assistant,
             save_assistant,
