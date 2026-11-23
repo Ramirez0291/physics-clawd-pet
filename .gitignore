@@ -17,6 +17,7 @@ artifacts/preview-browser/
 # macOS Finder
 .DS_Store
 # Codex 本地环境
+.claude
 .codex/
 # graph-workflow 的重建目录和中间产物
 _gw-*/

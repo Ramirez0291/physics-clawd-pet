@@ -26,18 +26,17 @@ const run = (pet: Pet, seconds: number) => {
 };
 
 describe('皮肤注册表', () => {
-  it('收进了 Clawd 和四款 Dots，默认皮肤排第一', () => {
-    expect(SKINS.map((s) => s.id)).toEqual(expect.arrayContaining(['clawd', 'dots', 'dots-green', 'dots-yellow', 'dots-pink']));
+  it('收进了内置皮肤，默认皮肤排第一', () => {
+    expect(SKINS.map((s) => s.id)).toEqual(expect.arrayContaining(['clawd', 'clawd-dsh', 'deepseek', 'miss-claude', 'blue-whale']));
     expect(SKINS[0].id).toBe(DEFAULT_SKIN);
   });
 
-  it('Clawd 是像素风；Dots 是平滑画风、毛茸茸，大小不量化', () => {
+  it('Clawd 是像素风；原画贴图皮肤大小不按像素格量化', () => {
     expect(findSkin('clawd').pixelArt).toBe(true);
-    const dots = findSkin('dots');
-    expect(dots.pixelArt).toBe(false);
-    expect(dots.parts.some((p) => p.fur)).toBe(true);
-    // 像素风 petScale 5 会画成 6px/格；平滑画风就是 5
-    const pet = makePet(dots);
+    const whale = findSkin('blue-whale');
+    expect(whale.pixelArt).toBe(false);
+    // 像素风 petScale 5 会画成 6px/格；贴图画风就是 5
+    const pet = makePet(whale);
     pet.setTuning({ ...pet.tuning, petScale: 5 });
     expect(pet.cell).toBe(5);
     expect(pet.pos.y + pet.halfH).toBeCloseTo(H);
@@ -45,72 +44,39 @@ describe('皮肤注册表', () => {
 
   it('每个形象只做自己会的小动作', () => {
     const clawd = makePet(findSkin('clawd'));
-    expect(clawd.perform('shake')).toBe(false);
-    const dots = makePet(findSkin('dots'));
-    expect(dots.perform('stocks')).toBe(false);
-    expect(dots.perform('shake')).toBe(true);
-    expect(dots.mode).toBe('shake');
+    expect(clawd.perform('read')).toBe(false);
+    const whale = makePet(findSkin('blue-whale'));
+    expect(whale.perform('stocks')).toBe(false);
+    expect(whale.perform('read')).toBe(true);
+    expect(whale.mode).toBe('read');
   });
 
-  it('Dots 随机挑小动作时不会去炒股，但会抖毛', () => {
+  it('不带炒股动作的皮肤随机挑小动作时不会去炒股', () => {
     const seen = new Set<string>();
     for (let seed = 1; seed < 80; seed++) {
-      const pet = makePet(findSkin('dots'), seed);
+      const pet = makePet(findSkin('blue-whale'), seed);
       pet.tuning = { ...pet.tuning, activityChance: 1, idleMin: 0.1, idleMax: 0.2 };
-      for (let i = 0; i < 2 / STEP && pet.mode !== 'laptop' && pet.mode !== 'coin' && pet.mode !== 'shake'; i++) {
+      for (let i = 0; i < 2 / STEP && pet.mode !== 'laptop' && pet.mode !== 'read' && pet.mode !== 'think'; i++) {
         pet.step(STEP, null);
         if (pet.mode === 'stocks') seen.add('stocks');
       }
       seen.add(pet.mode);
     }
     expect(seen.has('stocks')).toBe(false);
-    expect(seen.has('shake')).toBe(true);
-  });
-
-  it('抖毛会甩出毛团，抖完回到发呆', () => {
-    const pet = makePet(findSkin('dots'));
-    pet.perform('shake');
-    let fluffs = 0;
-    for (let i = 0; i < 2 / STEP && pet.mode === 'shake'; i++) {
-      pet.step(STEP, null);
-      fluffs += pet.consumeEvents().filter((e) => e.type === 'fluff').length;
-    }
-    expect(fluffs).toBe(4);
-    expect(pet.mode).toBe('idle');
   });
 
   it('换成不会当前动作的形象时，动作停下', () => {
     const pet = makePet(findSkin('clawd'));
     expect(pet.perform('stocks')).toBe(true);
-    const dots = findSkin('dots');
-    pet.setGrid(dots.grid, { pixelArt: dots.pixelArt, actions: dots.actions });
+    const whale = findSkin('blue-whale');
+    pet.setGrid(whale.grid, { pixelArt: whale.pixelArt, actions: whale.actions });
     expect(pet.mode).toBe('idle');
   });
 
   it('找不到的皮肤退回默认', () => {
     expect(findSkin('no-such-skin').id).toBe(DEFAULT_SKIN);
     expect(findSkin(undefined).id).toBe(DEFAULT_SKIN);
-    expect(findSkin('dots').id).toBe('dots');
-  });
-
-  it('粉色 Dots 保持闭眼曲线，呼吸继续；睁眼角色仍跟着光标看和眨眼', () => {
-    const snapshots = (skin: Skin) => {
-      const pet = makePet(skin);
-      pet.t = 0;
-      pet.cursor = { x: pet.pos.x - 300, y: pet.pos.y };
-      const first = computePose(pet, skin);
-      pet.t = 1.2;
-      pet.cursor = { x: pet.pos.x + 300, y: pet.pos.y };
-      const second = computePose(pet, skin);
-      const eyes = (pose: ReturnType<typeof computePose>) =>
-        skin.parts.flatMap((part, i) => part.role === 'eye' ? [pose.parts[i]] : []);
-      return { first, second, eyes };
-    };
-    const pink = snapshots(findSkin('dots-pink'));
-    expect(pink.eyes(pink.first)).toEqual(pink.eyes(pink.second));
-    expect(pink.first.torso).not.toEqual(pink.second.torso);
-    const green = snapshots(findSkin('dots-green'));
-    expect(green.eyes(green.first)).not.toEqual(green.eyes(green.second));
+    expect(findSkin('deepseek').id).toBe('deepseek');
   });
 });
 

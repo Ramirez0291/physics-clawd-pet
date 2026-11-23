@@ -16,14 +16,14 @@ export const PART_ROLES: readonly PartRole[] = ['body', 'eye', 'arm', 'leg'];
 export type Expression = 'smile' | 'happy' | 'surprised' | 'wince' | 'cry' | 'smug' | 'focus' | 'eat' | 'yawn';
 export const EXPRESSIONS: readonly Expression[] = ['smile', 'happy', 'surprised', 'wince', 'cry', 'smug', 'focus', 'eat', 'yawn'];
 
-/** 平滑画风下部件的形状；像素画风一律按矩形画 */
-export type PartShape = 'rect' | 'ellipse' | 'cloud' | 'pear' | 'onigiri' | 'frog' | 'bow' | 'arch' | 'eyelid';
-export const PART_SHAPES: readonly PartShape[] = ['rect', 'ellipse', 'cloud', 'pear', 'onigiri', 'frog', 'bow', 'arch', 'eyelid'];
-
 export type Polygon = [number, number][];
 export type SkinCategory = 'creature' | 'humanoid';
-export type MotionName = 'walk' | 'love' | 'laptop' | 'read' | 'write' | 'think' | 'held' | 'air' | 'roll' | 'land' | 'hero' | 'splat' | 'cling' | 'stretch' | 'perch' | 'peek' | 'balance' | 'stumble' | 'hop' | 'windowLeap' | 'windowLand' | 'windowDrop';
-export const MOTIONS: readonly MotionName[] = ['walk', 'love', 'laptop', 'read', 'write', 'think', 'held', 'air', 'roll', 'land', 'hero', 'splat', 'cling', 'stretch', 'perch', 'peek', 'balance', 'stumble', 'hop', 'windowLeap', 'windowLand', 'windowDrop'];
+export const MOTIONS = [
+  'walk', 'walkRight', 'cling', 'clingRight', 'blink', 'glanceLeft', 'glanceRight', 'wince', 'celebrate',
+  'love', 'laptop', 'stockWin', 'coin', 'read', 'write', 'think', 'held', 'air', 'roll', 'land', 'hero', 'splat',
+  'stretch', 'perch', 'peek', 'balance', 'stumble', 'hop', 'windowLeap', 'windowLand', 'windowDrop',
+] as const;
+export type MotionName = (typeof MOTIONS)[number];
 
 export interface SkinMotion {
   src: string;
@@ -41,6 +41,8 @@ export interface SkinMotion {
 }
 
 export interface MotionRegion extends ImageRegion {
+  /** 跨图集的动作帧可单独指定图片。 */
+  src?: string;
   /** 原图中的中心与接触线，以及每个采样像素占多少皮肤格。 */
   registration?: [x: number, y: number, unitsPerPixel: number];
 }
@@ -94,14 +96,6 @@ export interface SkinPartDef {
   sway?: SwayDef;
   /** 不跟着躯干动（坐下、呼吸、压扁时留在原地），比如拖在地上的尾巴 */
   anchored?: boolean;
-  /** 仅平滑画风：形状，默认 rect */
-  shape?: PartShape;
-  /** 仅平滑画风：绕部件中心旋转的角度（度，顺时针） */
-  rot?: number;
-  /** 仅平滑画风：true 使用皮肤毛发设置，也可为配饰单独指定毛发 */
-  fur?: boolean | FurDef;
-  /** 仅平滑画风：空心描边的宽度（格），比如眼镜框 */
-  outline?: number;
   /** 眼睛跟随光标的位移倍率，默认 1；大眼球可减小，避免瞳孔跑出眼白 */
   gaze?: number;
 }
@@ -110,18 +104,6 @@ export interface SwayDef {
   amp: number;
   speed?: number;
   phase?: number;
-}
-
-export interface FurDef {
-  /** 毛长（格） */
-  length: number;
-  /** 受光面和背光面的毛色；不写就用部件颜色调亮/调暗 */
-  light?: string;
-  shade?: string;
-  /** 毛发密度倍率，渲染时限制在 0.4～2，贴图生成后缓存 */
-  density?: number;
-  /** 毛发弯曲程度，0（直毛）～1 */
-  curl?: number;
 }
 
 export interface SkinDef {
@@ -133,12 +115,11 @@ export interface SkinDef {
   motions?: Partial<Record<MotionName, SkinMotion>>;
   /** [宽, 高]，单位格子。物理碰撞盒就是这个大小。 */
   grid: [number, number];
-  /** pixel：低分辨率网格里旋转再最近邻放大（默认）；smooth：按实际分辨率画平滑的形状 */
-  render?: 'pixel' | 'smooth' | 'sprite';
+  /** pixel：低分辨率网格里旋转再最近邻放大（默认）；sprite：直接绘制原画透明裁片和动作图集 */
+  render?: 'pixel' | 'sprite';
   palette: Record<string, string>;
   /** 像素图的字符 → palette 里的颜色名 */
   legend?: Record<string, string>;
-  fur?: FurDef;
   /** 会做哪些小动作，默认电脑、炒股、吃TOKEN；也可以加上专属动作 */
   actions?: Activity[];
   /** 电脑怎么用：side 摆在身边、屏幕朝外（默认）；lap 坐下来放在腿上，两只手一起敲 */
@@ -265,7 +246,7 @@ export function loadSkin(def: SkinDef): Skin {
   if (!(gw > 0 && gh > 0)) throw new Error('grid 必须是正数');
   if (!def.parts.length) throw new Error('皮肤没有任何部件');
   const render = def.render ?? 'pixel';
-  if (render !== 'pixel' && render !== 'smooth' && render !== 'sprite') throw new Error(`未知画风: ${render}`);
+  if (render !== 'pixel' && render !== 'sprite') throw new Error(`未知画风: ${render}`);
   const actions = def.actions ?? [...DEFAULT_ACTIVITIES];
   for (const a of actions) if (!ACTIVITIES.includes(a)) throw new Error(`未知小动作: ${a}`);
   if (def.laptop !== undefined && def.laptop !== 'side' && def.laptop !== 'lap') throw new Error(`未知电脑用法: ${def.laptop}`);
@@ -296,8 +277,6 @@ export function loadSkin(def: SkinDef): Skin {
     if (p.faces && !p.pixels) throw new Error(`部件 ${p.id}：faces 要配合 pixels 用`);
     if (p.pivot && !(p.pivot.length === 2 && p.pivot.every(Number.isFinite))) throw new Error(`部件 ${p.id} 的关节位置不对`);
     if (p.sway && (!p.pivot || !Number.isFinite(p.sway.amp))) throw new Error(`部件 ${p.id}：sway 需要 pivot 和幅度`);
-    if (p.shape && !PART_SHAPES.includes(p.shape)) throw new Error(`部件 ${p.id} 的形状未知: ${p.shape}`);
-    if (p.outline !== undefined && (!Number.isFinite(p.outline) || p.outline <= 0)) throw new Error(`部件 ${p.id} 的描边必须是正数`);
     if (p.gaze !== undefined && (!Number.isFinite(p.gaze) || p.gaze < 0)) throw new Error(`部件 ${p.id} 的视线倍率必须是非负数`);
     byRole.set(p.role, [...(byRole.get(p.role) ?? []), p]);
   }

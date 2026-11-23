@@ -798,26 +798,6 @@ export function computePose(pet: Pet, skin: Skin): Pose {
       coinProps(pet, skin, props);
       break;
     }
-    case 'shake': {
-      // 抖毛：身体左右猛甩、毛炸开一点，眼睛眯成缝，手脚跟着乱甩；脚踩在原地不动
-      const tm = pet.modeTime;
-      const env = smoothstep(tm / 0.2) * (1 - smoothstep((tm - (pet.modeDuration - 0.35)) / 0.35));
-      const wob = Math.sin(tm * 38);
-      crouchBy(0.4 * env);
-      torso.dx = wob * 0.7 * env;
-      torso.sx = 1 + 0.06 * env * Math.abs(wob);
-      each((pp, part, i) => {
-        if (part.role === 'arm') {
-          pp.dx = part.side * 0.4 * env;
-          pp.dy = (-0.8 + Math.sin(tm * 38 + part.side) * 0.5) * env;
-        } else if (part.role === 'leg') {
-          pp.dy = Math.sin(tm * 19 + i * Math.PI) > 0.3 ? -0.4 * env : 0;
-        }
-      });
-      if (env > 0.3) eyeSquint = 0.25;
-      eyeLookScale = 0;
-      break;
-    }
     case 'chime': {
       // 一只手把铃铛举过头顶，另一只叉腰；摇一下身子跟着一缩（缩的部分在引擎的果冻弹簧里）
       const raise = smoothstep(pet.modeTime / CHIME_LEAD) * (1 - smoothstep((p - 0.9) / 0.1));
@@ -984,8 +964,6 @@ export function computePose(pet: Pet, skin: Skin): Pose {
 
   each((pp, part) => {
     if (part.role !== 'eye') return;
-    // 闭眼曲线保留安静的表情，跟随躯干动作，不当作瞳孔移动或压扁。
-    if (part.shape === 'eyelid') return;
     const gaze = part.gaze ?? 1;
     pp.dx += look.x * eyeLookScale * gaze;
     pp.dy += look.y * 0.6 * eyeLookScale * gaze;
@@ -1009,7 +987,6 @@ function faceFor(pet: Pet): Expression {
       return Math.hypot(pet.vel.x, pet.vel.y) > 2500 ? 'wince' : 'surprised';
     case 'roll':
     case 'splat':
-    case 'shake':
       return 'wince';
     case 'hero':
     case 'cling':

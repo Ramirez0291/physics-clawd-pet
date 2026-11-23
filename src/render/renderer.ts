@@ -5,9 +5,9 @@ import { MAGIC_FIRE, MAGIC_FIRE_END, MAGIC_GROW, NORMAL, type Pet, wandGeom, wan
 import { bodyTransform, computePose, type Pose } from '../engine/pose';
 import type { Skin } from '../skin/types';
 import { type Clip, clipFrame } from './clips';
-import { FurCache, drawItems, layoutItems } from './smooth';
+import { drawItems, layoutItems } from './smooth';
 import { spriteRevision } from './sprites';
-import { motionFrames, motionFrameIndex, motionMirrored } from './motions';
+import { motionForSide, motionFrames, motionFrameIndex, motionMirrored } from './motions';
 
 /** 设备像素矩形 */
 interface Rect {
@@ -49,14 +49,13 @@ const GHOST_LIFE = 0.12;
 interface Target {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
-  fur: FurCache;
 }
 
 function makeTarget(): Target {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 128;
-  return { canvas, ctx: canvas.getContext('2d', { willReadFrequently: false })!, fur: new FurCache() };
+  return { canvas, ctx: canvas.getContext('2d', { willReadFrequently: false })! };
 }
 const STAR = '#f5c542';
 const INK = '#141413';
@@ -85,7 +84,6 @@ export class Renderer {
   private ghostPool: HTMLCanvasElement[] = [];
   private lastSig = '';
   private fullClear = true;
-  private fur = new FurCache();
   /** 迷你 Clawd 之类的附加宠物：各有一块精灵画布 */
   private extras = new Map<Pet, Target>();
   /** 当前皮肤解码好了的播片 */
@@ -109,7 +107,6 @@ export class Renderer {
   setSkin(skin: Skin) {
     this.skin = skin;
     this.lastSig = '';
-    this.fur.clear();
     this.extras.clear();
     this.clips.clear();
   }
@@ -142,7 +139,7 @@ export class Renderer {
 
   /** extras：一起画的附加宠物（不参与点击判定、没有残影） */
   draw(pet: Pet, particles: ParticleSystem, T: Tuning, dt: number, extras: readonly Pet[] = []) {
-    const main: Target = { canvas: this.sprite, ctx: this.sctx, fur: this.fur };
+    const main: Target = { canvas: this.sprite, ctx: this.sctx };
     const frame = this.rasterize(pet, T, main);
     this.frame = frame;
     for (const p of this.extras.keys()) if (!extras.includes(p)) this.extras.delete(p);
@@ -417,7 +414,7 @@ export class Renderer {
     const g = target.ctx;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, W, H);
-    drawItems(g, items, skin, m, ox, oy, unit * dpr, target.fur);
+    drawItems(g, items, skin, m, ox, oy);
     hash = Math.imul(hash ^ spriteRevision(), 16777619);
 
     const opaque = Number.isFinite(minX) ? { x0: minX, y0: minY, x1: maxX, y1: maxY } : null;
@@ -427,7 +424,9 @@ export class Renderer {
   /** 拟人动作图集跟随真实的抛掷、自转、贴墙、碰撞回弹，不是独立播放的装饰。 */
   private drawMotion(pet: Pet, T: Tuning, target: Target, pose: Pose): SpriteFrame | null {
     const skin = this.skin;
-    const motion = pose.motion && skin.motions?.[pose.motion];
+    if (!pose.motion) return null;
+    const name = motionForSide(skin, pose.motion, pet.side, pet.dir);
+    const motion = skin.motions?.[name];
     if (!motion) return null;
     const frames = motionFrames(motion);
     if (!frames) return null;
@@ -485,11 +484,11 @@ export class Renderer {
     g.drawImage(frame.image, frame.box.x, frame.box.y, frame.box.w, frame.box.h, x, y, w, h);
     g.setTransform(1, 0, 0, 1, 0, 0);
     const props = layoutItems(skin, pose).filter((i) => !i.part);
-    drawItems(g, props, skin, m, ox, oy, unit * this.dpr, target.fur);
+    drawItems(g, props, skin, m, ox, oy);
     let hash = 2166136261;
     for (const n of [index, mirror ? 1 : 0, x0, y, w, h, m.a, m.b, m.c, m.d, m.e, m.f, spriteRevision(), ...props.flatMap((p) => [p.cx, p.cy, p.hw, p.hh, p.rgba])]) hash = Math.imul(hash ^ Math.round(n * 1000), 16777619);
     // 同一索引的不同动作不能复用上一动作的画面。
-    for (const c of pose.motion!) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
+    for (const c of name) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
     return { ox, oy, up: 1, w: W, h: H, m, opaque: { x0: minX, y0: minY, x1: maxX, y1: maxY }, hash: hash >>> 0, fx: spritePixel(T, this.dpr) };
   }
 
@@ -576,33 +575,6 @@ export class Renderer {
           }
         }
         this.markDirty(x0, y0, 5 * u, art.length * u);
-        continue;
-      }
-      if (p.kind === 'fluff') {
-        // 一小撮毛：实心小团 + 一圈往外翘的短毛，边飘边变淡、边转
-        const rad = p.size * up * (0.7 + 0.3 * k);
-        const x = p.x * d;
-        const y = p.y * d;
-        const ctx = this.ctx;
-        ctx.globalAlpha = Math.min(1, k * 1.6);
-        ctx.fillStyle = p.color;
-        ctx.strokeStyle = p.color;
-        ctx.lineWidth = Math.max(1, up * 0.3);
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.arc(x, y, rad * 0.45, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        const spin = p.life * 3 + p.maxLife * 10;
-        for (let i = 0; i < 9; i++) {
-          const a = spin + (i / 9) * Math.PI * 2;
-          const len = rad * (i % 2 ? 0.8 : 1);
-          ctx.moveTo(x + Math.cos(a) * rad * 0.3, y + Math.sin(a) * rad * 0.3);
-          ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
-        }
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-        this.markDirty(x - rad, y - rad, rad * 2, rad * 2);
         continue;
       }
       // 像素风：不做透明渐隐，用"缩小一格一格"表现消散

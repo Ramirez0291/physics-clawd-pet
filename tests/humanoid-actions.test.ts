@@ -15,9 +15,9 @@ function make() {
 }
 
 describe('拟人动作类别', () => {
-  it('两个人形皮肤有独立类别，Clawd 和 Dots 保持宠物行为', () => {
+  it('人形皮肤有独立类别，Clawd 系列保持宠物行为', () => {
     for (const id of ['miss-claude', 'deepseek']) expect(findSkin(id).category).toBe('humanoid');
-    for (const id of ['clawd', 'dots']) expect(findSkin(id).category ?? 'creature').toBe('creature');
+    for (const id of ['clawd', 'clawd-dsh']) expect(findSkin(id).category ?? 'creature').toBe('creature');
   });
 
   it.each(['read', 'write', 'think'] as Activity[])('%s 能开始、保持地面接触、结束回到待机，也能被抓取打断', (act) => {

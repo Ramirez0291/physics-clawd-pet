@@ -141,13 +141,12 @@ async function main() {
     const c = clips.get(id);
     return !!c && pet.playClip(id, c.duration);
   };
-  /** 皮肤决定碰撞盒、画风（像素会量化大小）、会做的小动作和毛团颜色 */
+  /** 皮肤决定碰撞盒、画风（像素会量化大小）和会做的小动作 */
   const applySkin = () => {
     renderer.setSkin(skin);
     loadClips();
     pet.setGrid(skin.grid, { pixelArt: skin.pixelArt, actions: skin.actions, windowPlay: skin.windowPlay });
     minis.restyle();
-    particles.fluffColor = skin.palette.body ?? skin.parts[0].hex;
   };
   applySkin();
   const sampler = new VelocitySampler();

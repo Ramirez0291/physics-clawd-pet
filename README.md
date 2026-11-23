@@ -37,7 +37,7 @@ Windows 右下角没看见图标，先点时钟旁边的 **^** 看看。还找�
 
 几块屏幕它都能逛，哪块在全屏打游戏或放视频，它就绕开哪块。点到桌宠外面，点击照样交给原来的窗口。它也能避开你正在打字的输入框。Mac 上要先从菜单栏打开「避开正在输入的文本框…」，再授予辅助功能权限。
 
-右键托盘或菜单栏里的图标，可以**换形象、调大小、把桌宠叫回来**。图里的四位之外，还有戴贝雷帽的蓝色毛球、绿青蛙、黄饭团和粉兔子这四款 [Dots](skins/dots/README.md)。左键打开**调教面板**。
+右键托盘或菜单栏里的图标，可以**换形象、调大小、把桌宠叫回来**。左键打开**调教面板**。
 
 **小助手**也在右键菜单里。待办可以设截止时间，日历可以填 iCal 订阅链接或导入 `.ics`。默认按键鼠活动算，连续用电脑 45 分钟会提醒休息，也可以开整点报时。提醒会从桌宠头顶冒出来，等你点一下。
 
@@ -76,7 +76,7 @@ npm test
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-安装包在 `src-tauri/target/release/bundle/`。只想在浏览器里试物理，运行 `npm run dev` 后打开 `http://localhost:1420`，按 **D** 打开调教面板。`/preview.html` 可以并排看几款 Dots 的放大图和桌面大小。
+安装包在 `src-tauri/target/release/bundle/`。只想在浏览器里试物理，运行 `npm run dev` 后打开 `http://localhost:1420`，按 **D** 打开调教面板。
 
 ### 自制皮肤
 
@@ -107,7 +107,7 @@ Window title bars double as ledges. Wait until Clawd lands on one and move the w
 
 The pet crosses between monitors and stays off any screen running a full-screen app. Clicks outside the pet go through to the window underneath. It can also move away from the text box you’re typing in. On Mac, enable that from the menu bar and grant Accessibility permission.
 
-Right-click the tray or menu bar icon to **switch characters, change size or bring the pet back**. There are four furry [Dots](skins/dots/README.md) alongside the characters pictured above. Left-click the icon for the **Tuning panel**.
+Right-click the tray or menu bar icon to **switch characters, change size or bring the pet back**. Left-click the icon for the **Tuning panel**.
 
 Open **Assistant** from the same menu for to-dos with due dates, iCal subscriptions or local `.ics` files, hourly chimes and break reminders. By default, the break timer counts 45 minutes of keyboard and mouse use. Reminders wait in a bubble above the pet until you respond.
 
@@ -146,14 +146,14 @@ npm test
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-Installers go to `src-tauri/target/release/bundle/`. To try the physics in a browser, run `npm run dev`, open `http://localhost:1420` and press **D** for the tuning panel. `/preview.html` shows the Dots at large and desktop sizes.
+Installers go to `src-tauri/target/release/bundle/`. To try the physics in a browser, run `npm run dev`, open `http://localhost:1420` and press **D** for the tuning panel.
 
 <details>
 <summary>Project layout</summary>
 
 ```text
 src/engine/    Physics, state machine, animation and expressions
-src/render/    Pixel, sprite and fur renderers
+src/render/    Pixel and sprite renderers
 src/overlay/   Input, AI reactions and bubbles
 src/assistant/ To-dos, calendar, scheduler and Assistant window
 src/debug/     Tuning panel

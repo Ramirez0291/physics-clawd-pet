@@ -16,7 +16,21 @@ export function adaptHumanoidPose(pet: Pet, skin: Skin, pose: Pose): Pose {
   pose.torso.sx = clamp(pose.torso.sx, 0.94, 1.06);
   pose.torso.sy = clamp(pose.torso.sy, 0.9, 1.08);
   switch (pet.mode) {
+    case 'idle':
+      if (pet.taDa > 0 && skin.motions?.celebrate) motion = 'celebrate';
+      else if (pet.dizzy > 0 && skin.motions?.wince) motion = 'wince';
+      else if (pet.t % 4.2 > 4.05) motion = 'blink';
+      else if (pet.cursor && pet.side === 'floor') {
+        const dx = pet.cursor.x - pet.pos.x;
+        const dy = pet.cursor.y - pet.pos.y;
+        if (Math.abs(dx) > pet.halfW + 10 && Math.hypot(dx, dy) < 250) motion = dx < 0 ? 'glanceLeft' : 'glanceRight';
+      }
+      break;
     case 'laptop': motion = 'laptop'; break;
+    case 'stocks':
+      motion = pet.stockMood > 0.25 && skin.motions?.stockWin ? 'stockWin' : 'laptop';
+      break;
+    case 'coin': motion = 'coin'; break;
     case 'walk':
       motion = 'walk';
       pose.torso.dy = -Math.abs(Math.sin(phase)) * 0.14;
@@ -64,7 +78,8 @@ export function adaptHumanoidPose(pet: Pet, skin: Skin, pose: Pose): Pose {
     case 'splat': motion = 'splat'; break;
     case 'cling': motion = 'cling'; break;
     case 'land':
-      if (t / Math.max(0.01, pet.modeDuration) < 0.7) motion = 'land';
+      if (pet.taDa > 0 && skin.motions?.celebrate) motion = 'celebrate';
+      else if (t / Math.max(0.01, pet.modeDuration) < 0.7) motion = 'land';
       break;
     case 'stretch': motion = 'stretch'; break;
     case 'zap': motion = 'air'; break;

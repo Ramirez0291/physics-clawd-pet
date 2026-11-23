@@ -49,7 +49,6 @@ export type Mode =
   | 'laptop' // 掏出笔记本敲代码
   | 'stocks' // 掏出笔记本炒股
   | 'coin' // 掏出 token 金币吃掉
-  | 'shake' // 抖毛（毛茸茸的皮肤专属）
   | 'read' // 安静读书
   | 'write' // 写笔记
   | 'think' // 托腮思考
@@ -66,19 +65,16 @@ export type Mode =
   | 'clip'; // 播片：一段画好的 GIF 顶替程序化的样子（见 render/clips.ts）
 
 /** 发呆时会随机做的小动作。皮肤在 skin.json 的 actions 里挑自己会做哪些。 */
-export type Activity = 'laptop' | 'stocks' | 'coin' | 'shake' | 'read' | 'write' | 'think' | 'perch' | 'peek' | 'hop';
-export const ACTIVITIES: readonly Activity[] = ['laptop', 'stocks', 'coin', 'shake', 'read', 'write', 'think', 'perch', 'peek', 'hop'];
+export type Activity = 'laptop' | 'stocks' | 'coin' | 'read' | 'write' | 'think' | 'perch' | 'peek' | 'hop';
+export const ACTIVITIES: readonly Activity[] = ['laptop', 'stocks', 'coin', 'read', 'write', 'think', 'perch', 'peek', 'hop'];
 /** 皮肤没写 actions 时会做的 */
 export const DEFAULT_ACTIVITIES: readonly Activity[] = ['laptop', 'stocks', 'coin'];
 /** 随机挑小动作时的权重 */
-const ACTIVITY_WEIGHT: Record<Activity, number> = { laptop: 0.4, stocks: 0.3, coin: 0.3, shake: 0.3, read: 0.35, write: 0.35, think: 0.2, perch: 0.5, peek: 0.35, hop: 0.2 };
+const ACTIVITY_WEIGHT: Record<Activity, number> = { laptop: 0.4, stocks: 0.3, coin: 0.3, read: 0.35, write: 0.35, think: 0.2, perch: 0.5, peek: 0.35, hop: 0.2 };
 const SEATED_ACTIVITIES: ReadonlySet<Activity> = new Set(['laptop', 'stocks', 'read', 'write']);
 
 /** 玩电脑类的小动作（电脑摆在 dir 那一侧的地上） */
 export const LAPTOP_MODES: ReadonlySet<Mode> = new Set(['laptop', 'stocks']);
-/** 抖毛：时长，以及抖掉毛团的时刻（秒） */
-export const SHAKE_TIME = 1.6;
-const SHAKE_PUFFS = [0.35, 0.6, 0.85, 1.1];
 /** 吃TOKEN的时间轴（秒）：掏出 → 举起欣赏 → 三口吃掉 → 回味 */
 export const COIN_TIME = 3.3;
 export const COIN_BITES = [1.35, 1.8, 2.25];
@@ -172,7 +168,6 @@ export type PetEvent =
   | { type: 'dropped' }
   | { type: 'heart'; x: number; y: number; nx: number; ny: number }
   | { type: 'chomp'; x: number; y: number; nx: number; ny: number }
-  | { type: 'fluff'; x: number; y: number; nx: number; ny: number }
   | { type: 'ding'; x: number; y: number; nx: number; ny: number }
   | { type: 'confetti'; x: number; y: number; nx: number; ny: number }
   | { type: 'spark'; x: number; y: number }
@@ -222,7 +217,6 @@ const GROUNDED: ReadonlySet<Mode> = new Set([
   'laptop',
   'stocks',
   'coin',
-  'shake',
   'read',
   'write',
   'think',
@@ -236,7 +230,7 @@ const GROUNDED: ReadonlySet<Mode> = new Set([
   'magic',
 ]);
 /** 这些状态下光标在头顶来回蹭就算摸摸 */
-const RUBBABLE: ReadonlySet<Mode> = new Set(['idle', 'walk', 'land', 'petted', 'laptop', 'stocks', 'coin', 'shake', 'read', 'write', 'think', 'perch', 'peek', 'hop']);
+const RUBBABLE: ReadonlySet<Mode> = new Set(['idle', 'walk', 'land', 'petted', 'laptop', 'stocks', 'coin', 'read', 'write', 'think', 'perch', 'peek', 'hop']);
 /** 这些状态下挡住输入框会主动让开 */
 const AVOIDING: ReadonlySet<Mode> = new Set([
   'perch', 'peek', 'hop',
@@ -246,7 +240,6 @@ const AVOIDING: ReadonlySet<Mode> = new Set([
   'laptop',
   'stocks',
   'coin',
-  'shake',
   'chime',
   'stretch',
   'sign',
@@ -262,7 +255,6 @@ const CUEABLE: ReadonlySet<Mode> = new Set([
   'laptop',
   'stocks',
   'coin',
-  'shake',
   'chime',
   'stretch',
   'sign',
@@ -1066,7 +1058,6 @@ export class Pet {
       case 'laptop':
       case 'stocks':
       case 'coin':
-      case 'shake':
       case 'read':
       case 'write':
       case 'think':
@@ -1834,9 +1825,7 @@ export class Pet {
     const duration =
       m === 'coin'
         ? COIN_TIME
-        : m === 'shake'
-          ? SHAKE_TIME
-          : rand(T.laptopMin, Math.max(T.laptopMin, T.laptopMax), this.rng);
+        : rand(T.laptopMin, Math.max(T.laptopMin, T.laptopMax), this.rng);
     this.setMode(m, duration);
     if (m === 'perch') this.modeDuration = rand(5, 9, this.rng);
     if (m === 'peek') {
@@ -1894,14 +1883,6 @@ export class Pet {
         this.squash = Math.max(this.squash, 0.14);
         this.squashVel = 0;
         this.events.push({ type: 'chomp', x: this.pos.x, y: this.pos.y, nx: n.x, ny: n.y });
-      }
-    }
-    if (this.mode === 'shake') {
-      // 抖几下，每下甩掉几撮毛（bites 在这里当"抖了几下"用）
-      while (this.bites < SHAKE_PUFFS.length && this.modeTime >= SHAKE_PUFFS[this.bites]) {
-        this.bites++;
-        const n = NORMAL[this.side];
-        this.events.push({ type: 'fluff', x: this.pos.x, y: this.pos.y, nx: n.x, ny: n.y });
       }
     }
     if (this.modeTime < this.modeDuration) return;

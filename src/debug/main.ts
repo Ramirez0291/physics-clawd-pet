@@ -25,7 +25,6 @@ const MODE_NAMES: Record<string, string> = {
   laptop: '敲代码',
   stocks: '炒股',
   coin: '吃TOKEN',
-  shake: '抖毛',
   read: '读书',
   write: '写字',
   think: '思考',

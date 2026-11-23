@@ -1,0 +1,1161 @@
+{
+  "id": "gemini",
+  "name": "Gemini",
+  "category": "humanoid",
+  "description": "蓝紫长卷发、粉金异色瞳、猫耳和四角星发饰。害羞时会抱臂别开脸，跳窗落地会得意地比个 V。",
+  "windowPlay": true,
+  "grid": [
+    22,
+    25
+  ],
+  "render": "sprite",
+  "laptop": "lap",
+  "palette": {
+    "body": "#8373ce"
+  },
+  "actions": [
+    "laptop",
+    "read",
+    "write",
+    "think",
+    "stocks",
+    "coin",
+    "perch",
+    "peek",
+    "hop"
+  ],
+  "parts": [
+    {
+      "id": "body",
+      "role": "body",
+      "image": {
+        "src": "core.png",
+        "crop": [
+          44,
+          10,
+          280,
+          340
+        ]
+      },
+      "rect": [
+        0.918000000000001,
+        0.860000000000003,
+        19.88,
+        24.139999999999997
+      ]
+    }
+  ],
+  "motions": {
+    "blink": {
+      "src": "core.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            407,
+            10,
+            280,
+            342
+          ],
+          "registration": [
+            549,
+            350,
+            0.071
+          ]
+        }
+      ]
+    },
+    "glanceLeft": {
+      "src": "faces.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            84,
+            6,
+            325,
+            423
+          ],
+          "registration": [
+            248,
+            427,
+            0.057226
+          ]
+        }
+      ]
+    },
+    "glanceRight": {
+      "src": "faces.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            501,
+            6,
+            325,
+            423
+          ],
+          "registration": [
+            665,
+            427,
+            0.057226
+          ]
+        }
+      ]
+    },
+    "wince": {
+      "src": "faces.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            79,
+            451,
+            329,
+            422
+          ],
+          "registration": [
+            248,
+            871,
+            0.057226
+          ]
+        }
+      ]
+    },
+    "walk": {
+      "src": "core.png",
+      "height": 1,
+      "directional": true,
+      "facing": -1,
+      "fps": 5.5,
+      "frames": [
+        {
+          "crop": [
+            80,
+            373,
+            245,
+            340
+          ],
+          "registration": [
+            167,
+            711,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            447,
+            373,
+            237,
+            341
+          ],
+          "registration": [
+            535,
+            712,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            802,
+            373,
+            234,
+            340
+          ],
+          "registration": [
+            892,
+            711,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            1164,
+            373,
+            232,
+            340
+          ],
+          "registration": [
+            1258,
+            711,
+            0.071
+          ]
+        }
+      ]
+    },
+    "walkRight": {
+      "src": "expressions.png",
+      "height": 1,
+      "directional": true,
+      "facing": 1,
+      "fps": 5.5,
+      "frames": [
+        {
+          "crop": [
+            37,
+            4,
+            274,
+            351
+          ],
+          "registration": [
+            203,
+            353,
+            0.06957999999999999
+          ]
+        },
+        {
+          "crop": [
+            403,
+            4,
+            260,
+            350
+          ],
+          "registration": [
+            565,
+            352,
+            0.06957999999999999
+          ]
+        },
+        {
+          "crop": [
+            765,
+            4,
+            257,
+            351
+          ],
+          "registration": [
+            928,
+            353,
+            0.06957999999999999
+          ]
+        },
+        {
+          "crop": [
+            1128,
+            4,
+            258,
+            349
+          ],
+          "registration": [
+            1290,
+            351,
+            0.06957999999999999
+          ]
+        }
+      ]
+    },
+    "cling": {
+      "src": "core.png",
+      "height": 1,
+      "directional": true,
+      "facing": -1,
+      "fps": 4,
+      "frames": [
+        {
+          "crop": [
+            80,
+            373,
+            245,
+            340
+          ],
+          "registration": [
+            167,
+            711,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            447,
+            373,
+            237,
+            341
+          ],
+          "registration": [
+            535,
+            712,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            802,
+            373,
+            234,
+            340
+          ],
+          "registration": [
+            892,
+            711,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            1164,
+            373,
+            232,
+            340
+          ],
+          "registration": [
+            1258,
+            711,
+            0.071
+          ]
+        }
+      ]
+    },
+    "clingRight": {
+      "src": "expressions.png",
+      "height": 1,
+      "directional": true,
+      "facing": 1,
+      "fps": 4,
+      "frames": [
+        {
+          "crop": [
+            37,
+            4,
+            274,
+            351
+          ],
+          "registration": [
+            203,
+            353,
+            0.06957999999999999
+          ]
+        },
+        {
+          "crop": [
+            403,
+            4,
+            260,
+            350
+          ],
+          "registration": [
+            565,
+            352,
+            0.06957999999999999
+          ]
+        },
+        {
+          "crop": [
+            765,
+            4,
+            257,
+            351
+          ],
+          "registration": [
+            928,
+            353,
+            0.06957999999999999
+          ]
+        },
+        {
+          "crop": [
+            1128,
+            4,
+            258,
+            349
+          ],
+          "registration": [
+            1290,
+            351,
+            0.06957999999999999
+          ]
+        }
+      ]
+    },
+    "love": {
+      "src": "core.png",
+      "height": 1,
+      "fps": 5,
+      "loop": false,
+      "frames": [
+        {
+          "crop": [
+            774,
+            10,
+            269,
+            342
+          ],
+          "registration": [
+            909,
+            350,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            774,
+            10,
+            269,
+            342
+          ],
+          "registration": [
+            909,
+            350,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            942,
+            6,
+            328,
+            423
+          ],
+          "registration": [
+            1107,
+            427,
+            0.057226
+          ],
+          "src": "faces.png"
+        },
+        {
+          "crop": [
+            1123,
+            8,
+            276,
+            344
+          ],
+          "registration": [
+            1269,
+            350,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            1385,
+            6,
+            326,
+            423
+          ],
+          "registration": [
+            1550,
+            427,
+            0.057226
+          ],
+          "src": "faces.png"
+        },
+        {
+          "crop": [
+            1123,
+            8,
+            276,
+            344
+          ],
+          "registration": [
+            1269,
+            350,
+            0.071
+          ]
+        }
+      ]
+    },
+    "celebrate": {
+      "src": "faces.png",
+      "height": 1,
+      "fps": 5,
+      "loop": false,
+      "frames": [
+        {
+          "crop": [
+            1385,
+            449,
+            332,
+            424
+          ],
+          "registration": [
+            1551,
+            871,
+            0.057226
+          ]
+        },
+        {
+          "crop": [
+            389,
+            728,
+            302,
+            355
+          ],
+          "registration": [
+            542,
+            1081,
+            0.06815999999999998
+          ],
+          "src": "expressions.png"
+        }
+      ]
+    },
+    "read": {
+      "src": "core.png",
+      "height": 1,
+      "fps": 1.25,
+      "frames": [
+        {
+          "crop": [
+            34,
+            743,
+            300,
+            315
+          ],
+          "registration": [
+            185,
+            1056,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            34,
+            743,
+            300,
+            315
+          ],
+          "registration": [
+            185,
+            1056,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            36,
+            377,
+            301,
+            328
+          ],
+          "registration": [
+            183,
+            703,
+            0.06674
+          ],
+          "src": "expressions.png"
+        }
+      ]
+    },
+    "write": {
+      "src": "core.png",
+      "height": 1,
+      "fps": 1.7,
+      "frames": [
+        {
+          "crop": [
+            398,
+            741,
+            297,
+            317
+          ],
+          "registration": [
+            546,
+            1056,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            402,
+            375,
+            298,
+            329
+          ],
+          "registration": [
+            550,
+            702,
+            0.06674
+          ],
+          "src": "expressions.png"
+        }
+      ]
+    },
+    "laptop": {
+      "src": "core.png",
+      "height": 1,
+      "fps": 2,
+      "frames": [
+        {
+          "crop": [
+            760,
+            742,
+            298,
+            316
+          ],
+          "registration": [
+            906,
+            1056,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            751,
+            376,
+            309,
+            324
+          ],
+          "registration": [
+            903,
+            698,
+            0.06745
+          ],
+          "src": "expressions.png"
+        }
+      ]
+    },
+    "stockWin": {
+      "src": "expressions.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            1115,
+            738,
+            309,
+            338
+          ],
+          "registration": [
+            1266,
+            1074,
+            0.06674
+          ]
+        }
+      ]
+    },
+    "coin": {
+      "src": "expressions.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            756,
+            736,
+            306,
+            341
+          ],
+          "registration": [
+            908,
+            1075,
+            0.06674
+          ]
+        }
+      ]
+    },
+    "think": {
+      "src": "core.png",
+      "height": 1,
+      "fps": 1,
+      "frames": [
+        {
+          "crop": [
+            1119,
+            737,
+            298,
+            321
+          ],
+          "registration": [
+            1266,
+            1056,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            1119,
+            737,
+            298,
+            321
+          ],
+          "registration": [
+            1266,
+            1056,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            1123,
+            375,
+            299,
+            325
+          ],
+          "registration": [
+            1268,
+            698,
+            0.06745
+          ],
+          "src": "expressions.png"
+        }
+      ]
+    },
+    "held": {
+      "src": "physics.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            409,
+            753,
+            281,
+            306
+          ],
+          "registration": [
+            532,
+            1057,
+            0.071
+          ],
+          "polygon": [
+            [
+              409,
+              753
+            ],
+            [
+              527,
+              753
+            ],
+            [
+              540,
+              764
+            ],
+            [
+              567,
+              771
+            ],
+            [
+              690,
+              753
+            ],
+            [
+              690,
+              1059
+            ],
+            [
+              409,
+              1059
+            ]
+          ]
+        }
+      ]
+    },
+    "air": {
+      "src": "physics.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            1097,
+            378,
+            327,
+            286
+          ],
+          "registration": [
+            1261,
+            662,
+            0.071
+          ]
+        }
+      ]
+    },
+    "roll": {
+      "src": "physics.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            750,
+            769,
+            291,
+            261
+          ],
+          "registration": [
+            894,
+            1028,
+            0.06745
+          ]
+        }
+      ]
+    },
+    "land": {
+      "src": "physics.png",
+      "height": 1,
+      "fps": 4,
+      "loop": false,
+      "frames": [
+        {
+          "crop": [
+            45,
+            406,
+            300,
+            271
+          ],
+          "registration": [
+            173,
+            675,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            79,
+            451,
+            329,
+            422
+          ],
+          "registration": [
+            248,
+            871,
+            0.057226
+          ],
+          "src": "faces.png"
+        }
+      ]
+    },
+    "hero": {
+      "src": "physics.png",
+      "height": 1,
+      "fps": 5,
+      "loop": false,
+      "frames": [
+        {
+          "crop": [
+            45,
+            406,
+            300,
+            271
+          ],
+          "registration": [
+            173,
+            675,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            746,
+            370,
+            299,
+            331
+          ],
+          "registration": [
+            892,
+            699,
+            0.071
+          ]
+        }
+      ]
+    },
+    "splat": {
+      "src": "physics.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            1075,
+            855,
+            364,
+            200
+          ],
+          "registration": [
+            1236,
+            1053,
+            0.071
+          ]
+        }
+      ]
+    },
+    "stretch": {
+      "src": "core.png",
+      "height": 1,
+      "fps": 1.25,
+      "loop": false,
+      "frames": [
+        {
+          "crop": [
+            44,
+            10,
+            280,
+            340
+          ],
+          "registration": [
+            186,
+            350,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            45,
+            723,
+            279,
+            355
+          ],
+          "registration": [
+            184,
+            1076,
+            0.071
+          ],
+          "src": "physics.png"
+        },
+        {
+          "crop": [
+            45,
+            723,
+            279,
+            355
+          ],
+          "registration": [
+            184,
+            1076,
+            0.071
+          ],
+          "src": "physics.png"
+        },
+        {
+          "crop": [
+            44,
+            10,
+            280,
+            340
+          ],
+          "registration": [
+            186,
+            350,
+            0.071
+          ]
+        }
+      ]
+    },
+    "perch": {
+      "src": "physics.png",
+      "height": 1,
+      "fps": 1.8,
+      "frames": [
+        {
+          "crop": [
+            46,
+            8,
+            284,
+            346
+          ],
+          "registration": [
+            186,
+            257,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            409,
+            8,
+            283,
+            337
+          ],
+          "registration": [
+            553,
+            257,
+            0.071
+          ]
+        }
+      ]
+    },
+    "peek": {
+      "src": "physics.png",
+      "height": 1,
+      "directional": true,
+      "facing": -1,
+      "frames": [
+        {
+          "crop": [
+            753,
+            89,
+            297,
+            259
+          ],
+          "registration": [
+            890,
+            346,
+            0.071
+          ]
+        }
+      ]
+    },
+    "balance": {
+      "src": "physics.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            1111,
+            4,
+            306,
+            347
+          ],
+          "registration": [
+            1268,
+            349,
+            0.071
+          ]
+        }
+      ]
+    },
+    "stumble": {
+      "src": "faces.png",
+      "height": 1,
+      "fps": 5,
+      "loop": false,
+      "frames": [
+        {
+          "crop": [
+            500,
+            449,
+            326,
+            424
+          ],
+          "registration": [
+            663,
+            871,
+            0.057226
+          ]
+        },
+        {
+          "crop": [
+            45,
+            406,
+            300,
+            271
+          ],
+          "registration": [
+            173,
+            675,
+            0.071
+          ],
+          "src": "physics.png"
+        },
+        {
+          "crop": [
+            941,
+            449,
+            330,
+            424
+          ],
+          "registration": [
+            1107,
+            871,
+            0.057226
+          ]
+        }
+      ]
+    },
+    "hop": {
+      "src": "physics.png",
+      "height": 1,
+      "frames": [
+        {
+          "crop": [
+            45,
+            406,
+            300,
+            271
+          ],
+          "registration": [
+            173,
+            675,
+            0.071
+          ]
+        }
+      ]
+    },
+    "windowLeap": {
+      "src": "physics.png",
+      "height": 1,
+      "directional": true,
+      "facing": -1,
+      "frames": [
+        {
+          "crop": [
+            381,
+            362,
+            334,
+            290
+          ],
+          "registration": [
+            517,
+            650,
+            0.071
+          ]
+        }
+      ]
+    },
+    "windowLand": {
+      "src": "physics.png",
+      "height": 1,
+      "fps": 2,
+      "loop": false,
+      "frames": [
+        {
+          "crop": [
+            746,
+            370,
+            299,
+            331
+          ],
+          "registration": [
+            892,
+            699,
+            0.071
+          ]
+        },
+        {
+          "crop": [
+            1385,
+            449,
+            332,
+            424
+          ],
+          "registration": [
+            1551,
+            871,
+            0.057226
+          ],
+          "src": "faces.png"
+        }
+      ]
+    },
+    "windowDrop": {
+      "src": "faces.png",
+      "height": 1,
+      "fps": 5,
+      "loop": false,
+      "frames": [
+        {
+          "crop": [
+            500,
+            449,
+            326,
+            424
+          ],
+          "registration": [
+            663,
+            871,
+            0.057226
+          ]
+        },
+        {
+          "crop": [
+            1097,
+            378,
+            327,
+            286
+          ],
+          "registration": [
+            1261,
+            662,
+            0.071
+          ],
+          "src": "physics.png"
+        }
+      ]
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import type { PartImage, SkinMotion } from '../skin/types';
+import type { MotionName, PartImage, Skin, SkinMotion } from '../skin/types';
 import { imagePiece } from './sprites';
 import type { Pet, Side } from '../engine/pet';
 
@@ -6,6 +6,15 @@ import type { Pet, Side } from '../engine/pet';
 export function motionMirrored(motion: SkinMotion, side: Side, dir: 1 | -1): boolean {
   const localDir = (side === 'right' || side === 'ceiling' ? -dir : dir);
   return !!motion.directional && localDir !== (motion.facing ?? 1);
+}
+
+/** 有独立右向帧时保留角色两侧的配饰和异色瞳。 */
+export function motionForSide(skin: Skin, name: MotionName, side: Side, dir: 1 | -1): MotionName {
+  const motion = skin.motions?.[name];
+  if (!motion || !motionMirrored(motion, side, dir)) return name;
+  if (name === 'walk' && skin.motions?.walkRight) return 'walkRight';
+  if (name === 'cling' && skin.motions?.clingRight) return 'clingRight';
+  return name;
 }
 
 export function motionFrameIndex(motion: SkinMotion, pet: Pick<Pet, 'side' | 'mode' | 'modeTime' | 'tuning'>, locomotion = pet.mode === 'walk', speedScale = 1): number {
@@ -28,7 +37,7 @@ export function motionFrames(motion: SkinMotion): MotionFrame[] | null {
   if (old) return old;
   let defs = regions.get(motion);
   if (!defs) {
-    defs = motion.frames.map((f) => ({ ...f, src: motion.src }));
+    defs = motion.frames.map((f) => ({ ...f, src: f.src ?? motion.src }));
     regions.set(motion, defs);
   }
   const images = defs.map(imagePiece);

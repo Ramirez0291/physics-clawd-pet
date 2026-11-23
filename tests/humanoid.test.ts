@@ -45,7 +45,7 @@ describe('像素图部件', () => {
     expect(() => loadSkin(tiny({ pixels: ['AA', 'AA'] }))).toThrow(/3×3/);
     expect(() => loadSkin(tiny({ pixels: ['AAA', 'AZA', 'AAA'] }))).toThrow(/"Z"/);
     expect(() => loadSkin(tiny({ color: 'a', closed: ['AAA', 'AAA', 'AAA'] }))).toThrow(/closed/);
-    expect(() => loadSkin({ ...tiny({ pixels: ['AAA', 'AAA', 'AAA'] }), render: 'smooth' })).toThrow(/像素画风/);
+    expect(() => loadSkin({ ...tiny({ pixels: ['AAA', 'AAA', 'AAA'] }), render: 'sprite' })).toThrow(/像素画风/);
     expect(() => loadSkin(tiny({ color: 'a', sway: { amp: 5 } }))).toThrow(/pivot/);
   });
 });

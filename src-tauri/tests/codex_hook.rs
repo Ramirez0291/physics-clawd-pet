@@ -63,6 +63,9 @@ fn exchange(input: Value, observe: bool, reply: &str, shell: bool) -> (Value, St
         }
         std::thread::sleep(Duration::from_millis(10));
     };
+    // macOS（BSD）上 accept 出来的连接会继承监听端口的非阻塞：钩子的数据还没到时
+    // read_line 会直接报 WouldBlock。改回阻塞，靠下面的读超时兜底。
+    stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(3)))
         .unwrap();

@@ -11,16 +11,19 @@ const imageUrls = import.meta.glob<string>('../../skins/*/*.png', { eager: true,
 
 function withImages(path: string, def: SkinDef): SkinDef {
   const dir = path.slice(0, path.lastIndexOf('/') + 1);
-  const motions = Object.fromEntries(Object.entries(def.motions ?? {}).map(([name, motion]) => {
-    const src = imageUrls[dir + motion.src];
-    if (!src) throw new Error(`皮肤 ${def.id} 缺少动作原画 ${motion.src}`);
-    return [name, { ...motion, src }];
-  }));
+  const imageUrl = (file: string) => {
+    const url = imageUrls[dir + file];
+    if (!url) throw new Error(`皮肤 ${def.id} 缺少原画 ${file}`);
+    return url;
+  };
+  const motions = Object.fromEntries(Object.entries(def.motions ?? {}).map(([name, motion]) => [name, {
+    ...motion,
+    src: imageUrl(motion.src),
+    frames: motion.frames.map((frame) => frame.src ? { ...frame, src: imageUrl(frame.src) } : frame),
+  }]));
   return { ...def, motions, parts: def.parts.map((p) => {
     if (!p.image) return p;
-    const src = imageUrls[dir + p.image.src];
-    if (!src) throw new Error(`皮肤 ${def.id} 缺少原画 ${p.image.src}`);
-    return { ...p, image: { ...p.image, src } };
+    return { ...p, image: { ...p.image, src: imageUrl(p.image.src) } };
   }) };
 }
 
